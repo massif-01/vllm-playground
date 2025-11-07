@@ -4,6 +4,12 @@ A modern web interface for managing and interacting with vLLM (Very Large Langua
 
 ![vLLM Playground Interface](assets/vllm-playground.png)
 
+## 🆕 New: Model Compression Support
+
+Built-in LLM-Compressor integration for quantizing and compressing models directly from the UI!
+
+![Model Compression Interface](assets/llmcompressor.png)
+
 ## 📁 Project Structure
 
 ```
@@ -45,6 +51,7 @@ vllm-playground/
 │
 ├── assets/                      # Images and assets
 │   ├── vllm-playground.png          # WebUI screenshot
+│   ├── llmcompressor.png       # Model compression UI screenshot
 │   ├── vllm.png                # vLLM logo
 │   └── vllm.jpeg               # vLLM logo (alternate)
 │
@@ -137,6 +144,7 @@ nano config/vllm_cpu.env
 
 ## ✨ Features
 
+- **Model Compression**: LLM-Compressor integration for quantizing and compressing models 🆕
 - **Server Management**: Start/stop vLLM servers from the UI
 - **Chat Interface**: Interactive chat with streaming responses
 - **Smart Chat Templates**: Automatic model-specific template detection (Nov 2025) 🆕
