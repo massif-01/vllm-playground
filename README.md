@@ -97,17 +97,17 @@ For macOS users, the container provides the easiest setup with everything pre-co
 
 For local development or if you prefer not to use containers:
 
-#### 1. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-#### 2. Install vLLM
+#### 1. Install vLLM
 
 ```bash
 # For macOS/CPU mode
 pip install vllm
+```
+
+#### 2. Install Dependencies
+
+```bash
+pip install -r requirements.txt
 ```
 
 #### 3. Start the WebUI
