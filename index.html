@@ -295,7 +295,18 @@
                         </div>
                         
                         <div class="input-group">
-                            <textarea id="chat-input" class="chat-input" placeholder="Type your message here..." rows="3"></textarea>
+                            <div class="input-with-templates">
+                                <textarea id="chat-input" class="chat-input" placeholder="Type your message here..." rows="1"></textarea>
+                                <select id="message-templates" class="message-templates">
+                                    <option value="">Quick messages...</option>
+                                    <option value="Hello!">Hello!</option>
+                                    <option value="Hi, how are you?">Hi, how are you?</option>
+                                    <option value="Can you help me with something?">Can you help me with something?</option>
+                                    <option value="Thank you!">Thank you!</option>
+                                    <option value="What can you do?">What can you do?</option>
+                                    <option value="Tell me more about this.">Tell me more about this.</option>
+                                </select>
+                            </div>
                             <button id="send-btn" class="btn btn-primary" disabled>Send</button>
                         </div>
                     </div>

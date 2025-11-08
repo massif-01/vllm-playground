@@ -814,25 +814,67 @@ body {
 .input-group {
     display: flex;
     gap: 10px;
+    align-items: stretch;
+}
+
+.input-with-templates {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    justify-content: space-between;
 }
 
 .chat-input {
-    flex: 1;
-    padding: 12px;
+    width: 100%;
+    padding: 6px 12px;
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
-    border-radius: 8px;
+    border-radius: 6px;
     color: var(--text-primary);
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-family: inherit;
-    resize: vertical;
+    resize: none;
     transition: all 0.2s;
+    min-height: 0;
+    height: auto;
+    line-height: 1.4;
+    flex: 1;
 }
 
 .chat-input:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.message-templates {
+    width: 100%;
+    padding: 3px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+.message-templates:hover {
+    border-color: var(--primary-color);
+}
+
+.message-templates:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+}
+
+.message-templates option:first-child {
+    color: var(--text-secondary);
+    font-style: italic;
 }
 
 /* Logs Section */

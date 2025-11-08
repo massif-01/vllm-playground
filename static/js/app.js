@@ -98,6 +98,7 @@ class VLLMWebUI {
             // Chat
             chatContainer: document.getElementById('chat-container'),
             chatInput: document.getElementById('chat-input'),
+            messageTemplates: document.getElementById('message-templates'),
             systemPrompt: document.getElementById('system-prompt'),
             clearSystemPromptBtn: document.getElementById('clear-system-prompt-btn'),
             temperature: document.getElementById('temperature'),
@@ -237,6 +238,16 @@ class VLLMWebUI {
         });
         this.elements.clearChatBtn.addEventListener('click', () => this.clearChat());
         this.elements.clearSystemPromptBtn.addEventListener('click', () => this.clearSystemPrompt());
+        
+        // Message templates
+        this.elements.messageTemplates.addEventListener('change', (e) => {
+            if (e.target.value) {
+                this.elements.chatInput.value = e.target.value;
+                this.elements.chatInput.focus();
+                // Reset the dropdown to the placeholder
+                e.target.value = '';
+            }
+        });
         
         // Logs
         this.elements.clearLogsBtn.addEventListener('click', () => this.clearLogs());
