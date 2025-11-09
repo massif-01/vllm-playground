@@ -10,6 +10,12 @@ Built-in LLM-Compressor integration for quantizing and compressing models direct
 
 ![Model Compression Interface](assets/llmcompressor.png)
 
+## 📊 New: GuideLLM Benchmarking
+
+Integrated GuideLLM for comprehensive performance benchmarking and analysis. Run load tests and get detailed metrics on throughput, latency, and token generation performance!
+
+![GuideLLM Benchmark Results](assets/guidellm.png)
+
 ## 📁 Project Structure
 
 ```
@@ -52,6 +58,7 @@ vllm-playground/
 ├── assets/                      # Images and assets
 │   ├── vllm-playground.png          # WebUI screenshot
 │   ├── llmcompressor.png       # Model compression UI screenshot
+│   ├── guidellm.png            # GuideLLM benchmark results screenshot
 │   ├── vllm.png                # vLLM logo
 │   └── vllm.jpeg               # vLLM logo (alternate)
 │
@@ -145,6 +152,11 @@ nano config/vllm_cpu.env
 ## ✨ Features
 
 - **Model Compression**: LLM-Compressor integration for quantizing and compressing models 🆕
+- **Performance Benchmarking**: GuideLLM integration for comprehensive load testing with detailed metrics 🆕
+  - Request statistics (success rate, duration, avg times)
+  - Token throughput analysis (mean/median tokens per second)
+  - Latency percentiles (P50, P75, P90, P95, P99)
+  - Configurable load patterns and request rates
 - **Server Management**: Start/stop vLLM servers from the UI
 - **Chat Interface**: Interactive chat with streaming responses
 - **Smart Chat Templates**: Automatic model-specific template detection (Nov 2025) 🆕
@@ -153,7 +165,6 @@ nano config/vllm_cpu.env
 - **Gated Model Access**: Built-in HuggingFace token support for Llama, Gemma, etc.
 - **CPU & GPU Modes**: Automatic detection and configuration
 - **macOS Optimized**: Special support for Apple Silicon
-- **Benchmarking**: GuideLLM integration for performance testing
 - **Resizable Panels**: Customizable layout
 - **Command Preview**: See exact commands before execution
 

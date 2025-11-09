@@ -1092,9 +1092,11 @@ body {
 }
 
 .metrics-section .panel {
-    height: 400px;
+    height: auto;
+    max-height: calc(100vh - 160px);
     min-height: 200px;
     margin: 0 10px;
+    overflow-y: auto;
 }
 
 .metrics-controls {
@@ -1349,7 +1351,8 @@ body {
     margin-bottom: 20px;
     box-shadow: var(--shadow);
     min-height: 750px;
-    height: 750px;
+    height: auto;
+    max-height: 750px;
 }
 
 .compression-section .panel {
@@ -2057,4 +2060,176 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* JSON Display Styling */
+.json-display {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    tab-size: 2;
+    border: 1px solid var(--border-color);
+}
+
+.json-display::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.json-display::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.json-display::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.json-display::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* Benchmark Table Styling */
+.benchmark-table-section {
+    background: var(--panel-bg);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.table-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    gap: 20px;
+    margin-top: 15px;
+}
+
+.benchmark-table-group {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.benchmark-table-group h4 {
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.benchmark-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.benchmark-data-table thead {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.benchmark-data-table thead th {
+    padding: 10px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.benchmark-data-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s;
+}
+
+.benchmark-data-table tbody tr:hover {
+    background: rgba(16, 185, 129, 0.05);
+}
+
+.benchmark-data-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.benchmark-data-table td {
+    padding: 10px;
+    color: var(--text-primary);
+}
+
+.benchmark-data-table td.label {
+    font-weight: 500;
+    color: var(--text-secondary);
+    width: 50%;
+}
+
+.benchmark-data-table td.value {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Menlo', monospace;
+}
+
+.benchmark-data-table td.value.success {
+    color: #10b981;
+}
+
+.benchmark-data-table td.value.error {
+    color: #ef4444;
+}
+
+/* Responsive table layout */
+@media (max-width: 768px) {
+    .table-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Section Toggle Button */
+.section-toggle-btn {
+    min-width: 40px;
+    width: 40px;
+    height: 32px;
+    padding: 0;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.section-toggle-btn:hover {
+    background: var(--primary-color);
+    transform: scale(1.05);
+}
+
+.section-toggle-btn.collapsed {
+    transform: rotate(0deg);
+}
+
+/* Smooth transition for collapsible content */
+#compression-section-content,
+#metrics-section-content {
+    transition: opacity 0.3s ease;
+}
+
+/* Collapsed section styling */
+.compression-section.section-collapsed,
+.metrics-section.section-collapsed {
+    min-height: auto !important;
+    max-height: none !important;
+    height: auto !important;
+    flex: 0 0 auto !important;
+}
+
+.compression-section.section-collapsed .panel,
+.metrics-section.section-collapsed .panel {
+    height: auto !important;
+    max-height: none !important;
+    min-height: auto !important;
+}
+
+/* Section transitions */
+.compression-section,
+.metrics-section {
+    transition: all 0.3s ease;
 }

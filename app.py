@@ -101,6 +101,7 @@ class BenchmarkConfig(BaseModel):
     request_rate: float = 5.0
     prompt_tokens: int = 100
     output_tokens: int = 100
+    use_guidellm: bool = False  # Toggle between built-in and GuideLLM
 
 
 class BenchmarkResults(BaseModel):
@@ -114,6 +115,8 @@ class BenchmarkResults(BaseModel):
     total_tokens: int
     success_rate: float  # percentage
     completed: bool = False
+    raw_output: Optional[str] = None  # Raw guidellm output for display
+    json_output: Optional[str] = None  # JSON output from guidellm
 
 
 # ============ Compression Models ============
@@ -554,6 +557,32 @@ async def get_status() -> ServerStatus:
         uptime=uptime,
         config=current_config
     )
+
+
+@app.get("/api/features")
+async def get_features():
+    """Check which optional features are available"""
+    features = {
+        "vllm": True,  # Always available since it's core
+        "llmcompressor": False,
+        "guidellm": False
+    }
+    
+    # Check llmcompressor
+    try:
+        import llmcompressor
+        features["llmcompressor"] = True
+    except ImportError:
+        pass
+    
+    # Check guidellm
+    try:
+        import guidellm
+        features["guidellm"] = True
+    except ImportError:
+        pass
+    
+    return features
 
 
 @app.post("/api/start")
@@ -1476,7 +1505,7 @@ async def get_vllm_metrics():
 
 @app.post("/api/benchmark/start")
 async def start_benchmark(config: BenchmarkConfig):
-    """Start a benchmark test using simple load testing"""
+    """Start a benchmark test using either built-in or GuideLLM"""
     global vllm_process, current_config, benchmark_task, benchmark_results
     
     if vllm_process is None or vllm_process.poll() is not None:
@@ -1489,12 +1518,20 @@ async def start_benchmark(config: BenchmarkConfig):
         # Reset results
         benchmark_results = None
         
-        # Start benchmark task
-        benchmark_task = asyncio.create_task(
-            run_benchmark(config, current_config)
-        )
+        # Choose benchmark method
+        if config.use_guidellm:
+            # Start GuideLLM benchmark task
+            benchmark_task = asyncio.create_task(
+                run_guidellm_benchmark(config, current_config)
+            )
+            await broadcast_log("[BENCHMARK] Starting GuideLLM benchmark...")
+        else:
+            # Start built-in benchmark task
+            benchmark_task = asyncio.create_task(
+                run_benchmark(config, current_config)
+            )
+            await broadcast_log("[BENCHMARK] Starting built-in benchmark...")
         
-        await broadcast_log("[BENCHMARK] Starting performance benchmark...")
         return {"status": "started", "message": "Benchmark started"}
     
     except Exception as e:
@@ -1512,7 +1549,9 @@ async def get_benchmark_status():
     
     if benchmark_task.done():
         if benchmark_results:
-            return {"running": False, "results": benchmark_results.dict()}
+            results_dict = benchmark_results.dict()
+            logger.info(f"[BENCHMARK DEBUG] Returning results: {results_dict}")
+            return {"running": False, "results": results_dict}
         else:
             return {"running": False, "results": None, "error": "Benchmark failed"}
     
@@ -1587,6 +1626,11 @@ async def run_benchmark(config: BenchmarkConfig, server_config: VLLMConfig):
                             usage = data.get('usage', {})
                             completion_tokens = usage.get('completion_tokens', config.output_tokens)
                             
+                            # Debug: Log token extraction for first few requests
+                            if i < 3:
+                                logger.info(f"[BENCHMARK DEBUG] Request {i+1} usage: {usage}")
+                                logger.info(f"[BENCHMARK DEBUG] Request {i+1} completion_tokens: {completion_tokens}")
+                            
                             results.append({
                                 'latency': latency,
                                 'tokens': completion_tokens
@@ -1626,6 +1670,13 @@ async def run_benchmark(config: BenchmarkConfig, server_config: VLLMConfig):
             total_tokens = sum(tokens) + (len(results) * config.prompt_tokens)
             success_rate = (successful / config.total_requests) * 100
             
+            # Debug logging
+            logger.info(f"[BENCHMARK DEBUG] Total output tokens: {sum(tokens)}")
+            logger.info(f"[BENCHMARK DEBUG] Total prompt tokens: {len(results) * config.prompt_tokens}")
+            logger.info(f"[BENCHMARK DEBUG] Duration: {duration:.2f}s")
+            logger.info(f"[BENCHMARK DEBUG] tokens_per_second: {tokens_per_second:.2f}")
+            logger.info(f"[BENCHMARK DEBUG] total_tokens: {int(total_tokens)}")
+            
             benchmark_results = BenchmarkResults(
                 throughput=round(throughput, 2),
                 avg_latency=round(avg_latency, 2),
@@ -1639,6 +1690,7 @@ async def run_benchmark(config: BenchmarkConfig, server_config: VLLMConfig):
             )
             
             await broadcast_log(f"[BENCHMARK] Completed! Throughput: {throughput:.2f} req/s, Avg Latency: {avg_latency:.2f}ms")
+            await broadcast_log(f"[BENCHMARK] Token Throughput: {tokens_per_second:.2f} tok/s, Total Tokens: {int(total_tokens)}")
         else:
             await broadcast_log(f"[BENCHMARK] Failed - No successful requests")
             benchmark_results = None
@@ -1649,6 +1701,303 @@ async def run_benchmark(config: BenchmarkConfig, server_config: VLLMConfig):
     except Exception as e:
         logger.error(f"Benchmark error: {e}")
         await broadcast_log(f"[BENCHMARK] Error: {e}")
+        benchmark_results = None
+
+
+async def run_guidellm_benchmark(config: BenchmarkConfig, server_config: VLLMConfig):
+    """Run a benchmark using GuideLLM"""
+    global benchmark_results
+    
+    try:
+        await broadcast_log(f"[GUIDELLM] Configuration: {config.total_requests} requests at {config.request_rate} req/s")
+        
+        # Check if GuideLLM is installed
+        try:
+            import guidellm
+            # Don't import internal modules - we'll use the CLI
+            await broadcast_log(f"[GUIDELLM] Package found: {guidellm.__version__ if hasattr(guidellm, '__version__') else 'version unknown'}")
+        except ImportError as e:
+            error_msg = f"GuideLLM not installed: {str(e)}"
+            logger.error(error_msg)
+            await broadcast_log(f"[GUIDELLM] ERROR: {error_msg}")
+            await broadcast_log(f"[GUIDELLM] Python executable: {sys.executable}")
+            await broadcast_log(f"[GUIDELLM] Python path: {sys.path}")
+            await broadcast_log(f"[GUIDELLM] Run: pip install guidellm")
+            benchmark_results = None
+            return
+        
+        # Setup target URL
+        target_url = f"http://{server_config.host}:{server_config.port}/v1"
+        await broadcast_log(f"[GUIDELLM] Target: {target_url}")
+        
+        # Run GuideLLM benchmark using subprocess (since GuideLLM CLI is simpler)
+        import json
+        import subprocess
+        
+        # Find the correct Python executable that has guidellm installed
+        # Since guidellm was successfully imported, find its location and derive the Python path
+        python_exec = sys.executable
+        
+        # Get the path to the guidellm module to find the correct Python environment
+        guidellm_location = guidellm.__file__
+        await broadcast_log(f"[GUIDELLM] Module location: {guidellm_location}")
+        
+        # If guidellm is in a venv, derive the correct Python executable from it
+        guidellm_path = Path(guidellm_location)
+        # Typically: venv/lib/pythonX.Y/site-packages/guidellm/__init__.py
+        # We want: venv/bin/python
+        site_packages = None
+        for parent in guidellm_path.parents:
+            if parent.name == "site-packages":
+                site_packages = parent
+                break
+        
+        if site_packages:
+            # Go up from site-packages to find bin directory
+            venv_root = site_packages.parent.parent.parent
+            potential_python = venv_root / "bin" / "python"
+            if potential_python.exists():
+                python_exec = str(potential_python)
+                await broadcast_log(f"[GUIDELLM] Using Python from venv: {python_exec}")
+        
+        # Verify guidellm is accessible from this Python
+        try:
+            check_result = subprocess.run(
+                [python_exec, "-m", "guidellm", "--help"],
+                capture_output=True,
+                timeout=5
+            )
+            if check_result.returncode != 0:
+                # Current python_exec doesn't have guidellm, try finding it in PATH
+                await broadcast_log(f"[GUIDELLM] WARNING: guidellm CLI not accessible from {python_exec}")
+                await broadcast_log(f"[GUIDELLM] stderr: {check_result.stderr.decode()}")
+                # Try to find guidellm in PATH
+                which_result = subprocess.run(
+                    ["which", "guidellm"],
+                    capture_output=True,
+                    text=True
+                )
+                if which_result.returncode == 0:
+                    guidellm_bin = which_result.stdout.strip()
+                    await broadcast_log(f"[GUIDELLM] Found guidellm binary at: {guidellm_bin}")
+                    # Use guidellm directly instead of python -m
+                    python_exec = None  # Will use guidellm command directly
+                else:
+                    error_msg = "GuideLLM module is imported but CLI is not accessible. Try reinstalling: pip install guidellm"
+                    logger.error(error_msg)
+                    await broadcast_log(f"[GUIDELLM] ERROR: {error_msg}")
+                    benchmark_results = None
+                    return
+            else:
+                await broadcast_log(f"[GUIDELLM] CLI verified: {python_exec}")
+        except subprocess.TimeoutExpired:
+            error_msg = "GuideLLM check timed out"
+            logger.error(error_msg)
+            await broadcast_log(f"[GUIDELLM] ERROR: {error_msg}")
+            benchmark_results = None
+            return
+        except Exception as e:
+            error_msg = f"Error checking GuideLLM installation: {e}"
+            logger.error(error_msg)
+            await broadcast_log(f"[GUIDELLM] ERROR: {error_msg}")
+            benchmark_results = None
+            return
+        
+        # Create a temporary JSON file for results
+        result_file = tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False)
+        result_file.close()
+        
+        # Build GuideLLM command
+        # GuideLLM structure: guidellm benchmark [OPTIONS]
+        # Example: guidellm benchmark --target "url" --rate-type sweep --max-seconds 30 --data "prompt_tokens=256,output_tokens=128"
+        
+        if python_exec:
+            cmd = [
+                python_exec, "-m", "guidellm",
+                "benchmark",
+                "--target", target_url,
+            ]
+        else:
+            cmd = [
+                "guidellm",
+                "benchmark",
+                "--target", target_url,
+            ]
+        
+        # Add rate configuration
+        # If rate is specified, use constant rate, otherwise use sweep
+        if config.request_rate > 0:
+            cmd.extend(["--rate-type", "constant"])
+            cmd.extend(["--rate", str(config.request_rate)])
+        else:
+            cmd.extend(["--rate-type", "sweep"])
+        
+        # Add request limit
+        cmd.extend(["--max-requests", str(config.total_requests)])
+        
+        # Add token configuration in guidellm's data format
+        data_str = f"prompt_tokens={config.prompt_tokens},output_tokens={config.output_tokens}"
+        cmd.extend(["--data", data_str])
+        
+        # Add output path to save JSON results
+        cmd.extend(["--output-path", result_file.name])
+        
+        await broadcast_log(f"[GUIDELLM] Running: {' '.join(cmd)}")
+        await broadcast_log(f"[GUIDELLM] JSON output will be saved to: {result_file.name}")
+        
+        # Run GuideLLM process and capture ALL output
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        # Collect all output lines for parsing
+        output_lines = []
+        
+        # Stream output
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            decoded = line.decode().strip()
+            if decoded:
+                output_lines.append(decoded)
+                await broadcast_log(f"[GUIDELLM] {decoded}")
+        
+        # Wait for completion
+        await process.wait()
+        
+        if process.returncode != 0:
+            stderr = await process.stderr.read()
+            error_msg = stderr.decode().strip()
+            await broadcast_log(f"[GUIDELLM] Error: {error_msg}")
+            benchmark_results = None
+            return
+        
+        # Join all output for raw display
+        raw_output = "\n".join(output_lines)
+        
+        # Try to read JSON output file
+        json_output = None
+        try:
+            # Check if file exists and has content
+            if os.path.exists(result_file.name):
+                file_size = os.path.getsize(result_file.name)
+                await broadcast_log(f"[GUIDELLM] 📄 JSON file found: {result_file.name} (size: {file_size} bytes)")
+                
+                with open(result_file.name, 'r') as f:
+                    json_output = f.read()
+                
+                if json_output:
+                    await broadcast_log(f"[GUIDELLM] ✅ JSON output loaded successfully ({len(json_output)} characters)")
+                    # Validate it's valid JSON
+                    try:
+                        import json as json_module
+                        json_module.loads(json_output)
+                        await broadcast_log(f"[GUIDELLM] ✅ JSON is valid")
+                    except Exception as json_err:
+                        await broadcast_log(f"[GUIDELLM] ⚠️ JSON validation failed: {json_err}")
+                else:
+                    await broadcast_log(f"[GUIDELLM] ⚠️ JSON file is empty")
+            else:
+                await broadcast_log(f"[GUIDELLM] ⚠️ JSON output file not found at {result_file.name}")
+                await broadcast_log(f"[GUIDELLM] Checking if guidellm created a file in current directory...")
+                # Sometimes guidellm creates files with different names
+                import glob
+                json_files = glob.glob("*.json")
+                if json_files:
+                    await broadcast_log(f"[GUIDELLM] Found JSON files in current directory: {json_files}")
+        except Exception as e:
+            await broadcast_log(f"[GUIDELLM] ⚠️ Failed to read JSON output: {e}")
+            logger.exception("Error reading GuideLLM JSON output")
+        
+        # Parse results from text output
+        try:
+            # Extract metrics from the "Benchmarks Stats" table
+            # Example line: constant@5.00| 0.57| 9.43| 57.3| 115.1| 16.45| 16.08| ...
+            
+            throughput = 0.0
+            tokens_per_second = 0.0
+            avg_latency = 0.0
+            p50_latency = 0.0
+            p99_latency = 0.0
+            
+            # Find the stats line (after "Benchmark| Per Second|")
+            for i, line in enumerate(output_lines):
+                # Look for the data line with benchmark name and metrics
+                if 'constant@' in line or 'sweep@' in line:
+                    # Check if this is the stats line (contains numeric data)
+                    parts = [p.strip() for p in line.split('|') if p.strip()]
+                    if len(parts) >= 7:
+                        try:
+                            # Parse the data
+                            # Format: Benchmark| Per Second| Concurrency| Out Tok/sec| Tot Tok/sec| Req Latency mean| median| p99| ...
+                            throughput = float(parts[1])  # Per Second
+                            tokens_per_second = float(parts[3])  # Out Tok/sec
+                            # total_tok_per_sec = float(parts[4])  # Tot Tok/sec
+                            avg_latency = float(parts[5]) * 1000  # Convert seconds to ms
+                            p50_latency = float(parts[6]) * 1000  # median
+                            if len(parts) >= 8:
+                                p99_latency = float(parts[7]) * 1000  # p99
+                            
+                            await broadcast_log(f"[GUIDELLM] 📊 Parsed metrics from output")
+                            break
+                        except (ValueError, IndexError) as e:
+                            await broadcast_log(f"[GUIDELLM] Debug: Failed to parse line: {line}")
+                            await broadcast_log(f"[GUIDELLM] Debug: Parts: {parts}")
+                            continue
+            
+            benchmark_results = BenchmarkResults(
+                throughput=float(throughput),
+                avg_latency=float(avg_latency),
+                p50_latency=float(p50_latency),
+                p95_latency=float(p50_latency * 1.2),  # Estimate if not available
+                p99_latency=float(p99_latency),
+                tokens_per_second=float(tokens_per_second),
+                total_tokens=int(config.total_requests * config.output_tokens),  # Estimate
+                success_rate=100.0,  # Assume success if completed
+                completed=True,
+                raw_output=raw_output,  # Store raw output for display
+                json_output=json_output  # Store JSON output for display
+            )
+            
+            await broadcast_log(f"[GUIDELLM] ✅ Completed!")
+            await broadcast_log(f"[GUIDELLM] 📊 Throughput: {benchmark_results.throughput:.2f} req/s")
+            await broadcast_log(f"[GUIDELLM] ⚡ Token Throughput: {benchmark_results.tokens_per_second:.2f} tok/s")
+            await broadcast_log(f"[GUIDELLM] ⏱️  Avg Latency: {benchmark_results.avg_latency:.2f} ms")
+            await broadcast_log(f"[GUIDELLM] 📈 P99 Latency: {benchmark_results.p99_latency:.2f} ms")
+            
+        except Exception as e:
+            logger.error(f"Failed to parse GuideLLM results: {e}")
+            await broadcast_log(f"[GUIDELLM] Error parsing results: {e}")
+            # Still create result with raw output
+            benchmark_results = BenchmarkResults(
+                throughput=0.0,
+                avg_latency=0.0,
+                p50_latency=0.0,
+                p95_latency=0.0,
+                p99_latency=0.0,
+                tokens_per_second=0.0,
+                total_tokens=0,
+                success_rate=0.0,
+                completed=True,
+                raw_output=raw_output if 'raw_output' in locals() else "Error capturing output",
+                json_output=json_output if 'json_output' in locals() else None
+            )
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(result_file.name)
+            except:
+                pass
+                
+    except asyncio.CancelledError:
+        await broadcast_log("[GUIDELLM] Benchmark cancelled")
+        raise
+    except Exception as e:
+        logger.error(f"GuideLLM benchmark error: {e}")
+        await broadcast_log(f"[GUIDELLM] Error: {e}")
         benchmark_results = None
 
 

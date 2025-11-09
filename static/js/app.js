@@ -122,6 +122,22 @@ class VLLMWebUI {
             benchmarkRate: document.getElementById('benchmark-rate'),
             benchmarkPromptTokens: document.getElementById('benchmark-prompt-tokens'),
             benchmarkOutputTokens: document.getElementById('benchmark-output-tokens'),
+            benchmarkMethodBuiltin: document.getElementById('benchmark-method-builtin'),
+            benchmarkMethodGuidellm: document.getElementById('benchmark-method-guidellm'),
+            benchmarkCommandText: document.getElementById('benchmark-command-text'),
+            copyBenchmarkCommandBtn: document.getElementById('copy-benchmark-command-btn'),
+            guidellmRawOutput: document.getElementById('guidellm-raw-output'),
+            copyGuidellmOutputBtn: document.getElementById('copy-guidellm-output-btn'),
+            toggleRawOutputBtn: document.getElementById('toggle-raw-output-btn'),
+            guidellmRawOutputContent: document.getElementById('guidellm-raw-output-content'),
+            guidellmJsonOutput: document.getElementById('guidellm-json-output'),
+            copyGuidellmJsonBtn: document.getElementById('copy-guidellm-json-btn'),
+            toggleJsonOutputBtn: document.getElementById('toggle-json-output-btn'),
+            guidellmJsonOutputContent: document.getElementById('guidellm-json-output-content'),
+            toggleCompressionSectionBtn: document.getElementById('toggle-compression-section-btn'),
+            compressionSectionContent: document.getElementById('compression-section-content'),
+            toggleMetricsSectionBtn: document.getElementById('toggle-metrics-section-btn'),
+            metricsSectionContent: document.getElementById('metrics-section-content'),
             metricsDisplay: document.getElementById('metrics-display'),
             metricsGrid: document.getElementById('metrics-grid'),
             benchmarkProgress: document.getElementById('benchmark-progress'),
@@ -190,6 +206,12 @@ class VLLMWebUI {
         
         // Initialize compression command preview
         this.updateCompressCommandPreview();
+        
+        // Initialize benchmark command preview
+        this.updateBenchmarkCommandPreview();
+        
+        // Check feature availability
+        this.checkFeatureAvailability();
         
         // Connect WebSocket for logs
         this.connectWebSocket();
@@ -295,6 +317,36 @@ class VLLMWebUI {
         this.elements.runBenchmarkBtn.addEventListener('click', () => this.runBenchmark());
         this.elements.stopBenchmarkBtn.addEventListener('click', () => this.stopBenchmark());
         
+        // Benchmark config changes - update command preview
+        const benchmarkConfigElements = [
+            this.elements.benchmarkRequests,
+            this.elements.benchmarkRate,
+            this.elements.benchmarkPromptTokens,
+            this.elements.benchmarkOutputTokens,
+            this.elements.host,  // Also update when host changes
+            this.elements.port   // Also update when port changes
+        ];
+        
+        benchmarkConfigElements.forEach(element => {
+            element.addEventListener('input', () => this.updateBenchmarkCommandPreview());
+            element.addEventListener('change', () => this.updateBenchmarkCommandPreview());
+        });
+        
+        // Benchmark method toggle
+        this.elements.benchmarkMethodBuiltin.addEventListener('change', () => this.updateBenchmarkCommandPreview());
+        this.elements.benchmarkMethodGuidellm.addEventListener('change', () => this.updateBenchmarkCommandPreview());
+        
+        // Copy benchmark command button
+        this.elements.copyBenchmarkCommandBtn.addEventListener('click', () => this.copyBenchmarkCommand());
+        this.elements.copyGuidellmOutputBtn.addEventListener('click', () => this.copyGuidellmOutput());
+        this.elements.toggleRawOutputBtn.addEventListener('click', () => this.toggleRawOutput());
+        this.elements.copyGuidellmJsonBtn.addEventListener('click', () => this.copyGuidellmJson());
+        this.elements.toggleJsonOutputBtn.addEventListener('click', () => this.toggleJsonOutput());
+        
+        // Section toggles
+        this.elements.toggleCompressionSectionBtn.addEventListener('click', () => this.toggleCompressionSection());
+        this.elements.toggleMetricsSectionBtn.addEventListener('click', () => this.toggleMetricsSection());
+        
         // Compression
         this.elements.runCompressionBtn.addEventListener('click', () => this.runCompression());
         this.elements.stopCompressionBtn.addEventListener('click', () => this.stopCompression());
@@ -365,6 +417,39 @@ class VLLMWebUI {
             // Attempt to reconnect after 3 seconds
             setTimeout(() => this.connectWebSocket(), 3000);
         };
+    }
+
+    async checkFeatureAvailability() {
+        try {
+            const response = await fetch('/api/features');
+            const features = await response.json();
+            
+            // Log feature availability
+            console.log('Feature availability:', features);
+            
+            // Disable guidellm option if not available
+            if (!features.guidellm) {
+                this.elements.benchmarkMethodGuidellm.disabled = true;
+                this.elements.benchmarkMethodGuidellm.parentElement.classList.add('disabled');
+                this.elements.benchmarkMethodGuidellm.parentElement.title = 'GuideLLM not installed. Run: pip install guidellm';
+                
+                // Select built-in method instead
+                if (this.elements.benchmarkMethodBuiltin) {
+                    this.elements.benchmarkMethodBuiltin.checked = true;
+                }
+                
+                console.warn('GuideLLM is not available. Install with: pip install guidellm');
+            }
+            
+            // Disable llmcompressor tab if not available
+            if (!features.llmcompressor && this.elements.compressionTab) {
+                this.elements.compressionTab.disabled = true;
+                this.elements.compressionTab.title = 'LLM Compressor not installed. Run: pip install llmcompressor';
+                console.warn('LLM Compressor is not available. Install with: pip install llmcompressor');
+            }
+        } catch (error) {
+            console.error('Failed to check feature availability:', error);
+        }
     }
 
     async pollStatus() {
@@ -1580,7 +1665,8 @@ class VLLMWebUI {
             total_requests: parseInt(this.elements.benchmarkRequests.value),
             request_rate: parseFloat(this.elements.benchmarkRate.value),
             prompt_tokens: parseInt(this.elements.benchmarkPromptTokens.value),
-            output_tokens: parseInt(this.elements.benchmarkOutputTokens.value)
+            output_tokens: parseInt(this.elements.benchmarkOutputTokens.value),
+            use_guidellm: this.elements.benchmarkMethodGuidellm.checked
         };
 
         this.benchmarkRunning = true;
@@ -1631,6 +1717,8 @@ class VLLMWebUI {
         try {
             const response = await fetch('/api/benchmark/status');
             const data = await response.json();
+            
+            console.log('[POLL] Benchmark status:', data);
 
             if (data.running) {
                 // Update progress (estimate based on time)
@@ -1647,9 +1735,11 @@ class VLLMWebUI {
                 this.benchmarkPollInterval = null;
 
                 if (data.results) {
+                    console.log('[POLL] Benchmark completed with results');
                     this.displayBenchmarkResults(data.results);
                     this.showNotification('Benchmark completed!', 'success');
                 } else {
+                    console.error('[POLL] Benchmark completed but no results:', data);
                     this.showNotification('Benchmark failed', 'error');
                 }
 
@@ -1661,27 +1751,320 @@ class VLLMWebUI {
     }
 
     displayBenchmarkResults(results) {
-        // Hide progress, show metrics
+        // Hide progress
         this.elements.benchmarkProgress.style.display = 'none';
-        this.elements.metricsGrid.style.display = 'grid';
+        
+        // Check if this is GuideLLM results (has raw_output) or built-in results
+        const isGuideLLM = results.raw_output && results.raw_output.length > 0;
 
-        // Update metric cards
-        document.getElementById('metric-throughput').textContent = `${results.throughput} req/s`;
-        document.getElementById('metric-latency').textContent = `${results.avg_latency} ms`;
-        document.getElementById('metric-tokens-per-sec').textContent = `${results.tokens_per_second} tok/s`;
-        document.getElementById('metric-p50').textContent = `${results.p50_latency} ms`;
-        document.getElementById('metric-p95').textContent = `${results.p95_latency} ms`;
-        document.getElementById('metric-p99').textContent = `${results.p99_latency} ms`;
-        document.getElementById('metric-total-tokens').textContent = results.total_tokens.toLocaleString();
-        document.getElementById('metric-success-rate').textContent = `${results.success_rate} %`;
+        // Debug: Log the results to console
+        console.log('=== BENCHMARK RESULTS DEBUG ===');
+        console.log('Full results object:', JSON.stringify(results, null, 2));
+        console.log('Is GuideLLM:', isGuideLLM);
+        console.log('throughput:', results.throughput);
+        console.log('avg_latency:', results.avg_latency);
+        console.log('tokens_per_second:', results.tokens_per_second);
+        console.log('total_tokens:', results.total_tokens);
+        console.log('p50_latency:', results.p50_latency);
+        console.log('p95_latency:', results.p95_latency);
+        console.log('p99_latency:', results.p99_latency);
+        console.log('success_rate:', results.success_rate);
+        console.log('json_output:', results.json_output ? 'Present' : 'Missing');
+        console.log('==============================');
 
-        // Animate cards
-        document.querySelectorAll('.metric-card').forEach((card, index) => {
-            setTimeout(() => {
-                card.classList.add('updated');
-                setTimeout(() => card.classList.remove('updated'), 500);
-            }, index * 50);
-        });
+        if (isGuideLLM) {
+            // GuideLLM: Show raw output, hide metrics
+            this.elements.metricsGrid.style.display = 'none';
+            const rawOutputSection = document.getElementById('guidellm-raw-output-section');
+            const rawOutputTextarea = document.getElementById('guidellm-raw-output');
+            const rawOutputContent = this.elements.guidellmRawOutputContent;
+            const toggleBtn = this.elements.toggleRawOutputBtn;
+            const jsonOutputSection = document.getElementById('guidellm-json-output-section');
+            const jsonOutputPre = document.getElementById('guidellm-json-output');
+            
+            if (rawOutputSection && rawOutputTextarea) {
+                rawOutputTextarea.value = results.raw_output;
+                rawOutputSection.style.display = 'block';
+                // Reset to visible state when new results come in
+                if (rawOutputContent) {
+                    rawOutputContent.style.display = 'block';
+                }
+                if (toggleBtn) {
+                    toggleBtn.textContent = 'Hide';
+                }
+            }
+            
+            // Try to extract and display JSON from results
+            if (results.json_output) {
+                try {
+                    // Parse and format JSON
+                    const jsonData = typeof results.json_output === 'string' 
+                        ? JSON.parse(results.json_output) 
+                        : results.json_output;
+                    
+                    if (jsonOutputSection && jsonOutputPre) {
+                        jsonOutputPre.textContent = JSON.stringify(jsonData, null, 2);
+                        jsonOutputSection.style.display = 'block';
+                        
+                        // Reset to visible state when new results come in
+                        const jsonOutputContent = this.elements.guidellmJsonOutputContent;
+                        const toggleJsonBtn = this.elements.toggleJsonOutputBtn;
+                        if (jsonOutputContent) {
+                            jsonOutputContent.style.display = 'block';
+                        }
+                        if (toggleJsonBtn) {
+                            toggleJsonBtn.textContent = 'Hide';
+                        }
+                    }
+                    
+                    // Also create table view
+                    console.log('[BENCHMARK] Creating table view from JSON data');
+                    this.displayBenchmarkTable(jsonData);
+                } catch (e) {
+                    console.warn('Failed to parse GuideLLM JSON output:', e);
+                    if (jsonOutputSection) {
+                        jsonOutputSection.style.display = 'none';
+                    }
+                }
+            } else {
+                console.warn('[BENCHMARK] No json_output in results');
+                if (jsonOutputSection) {
+                    jsonOutputSection.style.display = 'none';
+                }
+            }
+        } else {
+            // Built-in: Show metrics, hide raw output
+            this.elements.metricsGrid.style.display = 'grid';
+            const rawOutputSection = document.getElementById('guidellm-raw-output-section');
+            const jsonOutputSection = document.getElementById('guidellm-json-output-section');
+            const tableSection = document.getElementById('guidellm-table-section');
+            if (rawOutputSection) {
+                rawOutputSection.style.display = 'none';
+            }
+            if (jsonOutputSection) {
+                jsonOutputSection.style.display = 'none';
+            }
+            if (tableSection) {
+                tableSection.style.display = 'none';
+            }
+
+            // Update metric cards with defensive checks
+            document.getElementById('metric-throughput').textContent = 
+                results.throughput !== undefined ? `${results.throughput.toFixed(2)} req/s` : '-- req/s';
+            document.getElementById('metric-latency').textContent = 
+                results.avg_latency !== undefined ? `${results.avg_latency.toFixed(2)} ms` : '-- ms';
+            document.getElementById('benchmark-tokens-per-sec').textContent = 
+                results.tokens_per_second !== undefined ? `${results.tokens_per_second.toFixed(2)} tok/s` : '-- tok/s';
+            document.getElementById('metric-p50').textContent = 
+                results.p50_latency !== undefined ? `${results.p50_latency.toFixed(2)} ms` : '-- ms';
+            document.getElementById('metric-p95').textContent = 
+                results.p95_latency !== undefined ? `${results.p95_latency.toFixed(2)} ms` : '-- ms';
+            document.getElementById('metric-p99').textContent = 
+                results.p99_latency !== undefined ? `${results.p99_latency.toFixed(2)} ms` : '-- ms';
+            document.getElementById('benchmark-total-tokens').textContent = 
+                results.total_tokens !== undefined ? results.total_tokens.toLocaleString() : '--';
+            document.getElementById('metric-success-rate').textContent = 
+                results.success_rate !== undefined ? `${results.success_rate.toFixed(1)} %` : '-- %';
+
+            // Animate cards
+            document.querySelectorAll('.metric-card').forEach((card, index) => {
+                setTimeout(() => {
+                    card.classList.add('updated');
+                    setTimeout(() => card.classList.remove('updated'), 500);
+                }, index * 50);
+            });
+        }
+    }
+
+    displayBenchmarkTable(jsonData) {
+        console.log('[TABLE] displayBenchmarkTable called with data:', jsonData);
+        
+        const tableSection = document.getElementById('guidellm-table-section');
+        const tableContent = document.getElementById('guidellm-table-content');
+        
+        console.log('[TABLE] Table section element:', tableSection);
+        console.log('[TABLE] Table content element:', tableContent);
+        
+        if (!tableSection || !tableContent) {
+            console.error('[TABLE] Table section or content element not found');
+            return;
+        }
+        
+        if (!jsonData || !jsonData.benchmarks || jsonData.benchmarks.length === 0) {
+            console.warn('[TABLE] No benchmark data in JSON');
+            return;
+        }
+        
+        const benchmark = jsonData.benchmarks[0]; // Get first benchmark
+        console.log('[TABLE] Processing benchmark:', benchmark);
+        
+        let html = '';
+        
+        // Configuration Table
+        html += '<div class="benchmark-table-group">';
+        html += '<h4>⚙️ Configuration</h4>';
+        html += '<table class="benchmark-data-table">';
+        html += '<tbody>';
+        
+        if (benchmark.worker) {
+            html += `<tr><td class="label">Backend Target</td><td class="value">${benchmark.worker.backend_target || 'N/A'}</td></tr>`;
+            html += `<tr><td class="label">Model</td><td class="value">${benchmark.worker.backend_model || 'N/A'}</td></tr>`;
+        }
+        
+        if (benchmark.request_loader) {
+            html += `<tr><td class="label">Data Configuration</td><td class="value">${benchmark.request_loader.data || 'N/A'}</td></tr>`;
+        }
+        
+        if (benchmark.args && benchmark.args.strategy) {
+            html += `<tr><td class="label">Strategy Type</td><td class="value">${benchmark.args.strategy.type_ || 'N/A'}</td></tr>`;
+            html += `<tr><td class="label">Request Rate</td><td class="value">${benchmark.args.strategy.rate || 'N/A'} req/s</td></tr>`;
+        }
+        
+        if (benchmark.args) {
+            html += `<tr><td class="label">Max Requests</td><td class="value">${benchmark.args.max_number || 'N/A'}</td></tr>`;
+        }
+        
+        html += '</tbody></table></div>';
+        
+        // Request Statistics Table
+        if (benchmark.run_stats) {
+            const stats = benchmark.run_stats;
+            const duration = stats.end_time - stats.start_time;
+            
+            html += '<div class="benchmark-table-group">';
+            html += '<h4>📊 Request Statistics</h4>';
+            html += '<table class="benchmark-data-table">';
+            html += '<tbody>';
+            
+            if (stats.requests_made) {
+                html += `<tr><td class="label">Total Requests</td><td class="value">${stats.requests_made.total || 0}</td></tr>`;
+                html += `<tr><td class="label">Successful</td><td class="value success">${stats.requests_made.successful || 0}</td></tr>`;
+                html += `<tr><td class="label">Errored</td><td class="value ${stats.requests_made.errored > 0 ? 'error' : ''}">${stats.requests_made.errored || 0}</td></tr>`;
+                html += `<tr><td class="label">Incomplete</td><td class="value">${stats.requests_made.incomplete || 0}</td></tr>`;
+            }
+            
+            html += `<tr><td class="label">Duration</td><td class="value">${duration.toFixed(2)} seconds</td></tr>`;
+            html += `<tr><td class="label">Avg Request Time</td><td class="value">${(stats.request_time_avg || 0).toFixed(3)} seconds</td></tr>`;
+            html += `<tr><td class="label">Avg Worker Time</td><td class="value">${(stats.worker_time_avg || 0).toFixed(3)} seconds</td></tr>`;
+            html += `<tr><td class="label">Avg Queued Time</td><td class="value">${((stats.queued_time_avg || 0) * 1000).toFixed(2)} ms</td></tr>`;
+            
+            html += '</tbody></table></div>';
+        }
+        
+        // Performance Metrics Table
+        if (benchmark.metrics) {
+            html += '<div class="benchmark-table-group">';
+            html += '<h4>🚀 Performance Metrics</h4>';
+            html += '<table class="benchmark-data-table">';
+            html += '<thead><tr><th>Metric</th><th>Mean</th><th>Median</th><th>Min</th><th>Max</th><th>Std Dev</th></tr></thead>';
+            html += '<tbody>';
+            
+            // Requests per second
+            if (benchmark.metrics.requests_per_second && benchmark.metrics.requests_per_second.successful) {
+                const rps = benchmark.metrics.requests_per_second.successful;
+                html += '<tr>';
+                html += '<td class="label">Requests/Second</td>';
+                html += `<td>${(rps.mean || 0).toFixed(2)}</td>`;
+                html += `<td>${(rps.median || 0).toFixed(2)}</td>`;
+                html += `<td>${(rps.min || 0).toFixed(2)}</td>`;
+                html += `<td>${(rps.max || 0).toFixed(2)}</td>`;
+                html += `<td>${(rps.std_dev || 0).toFixed(2)}</td>`;
+                html += '</tr>';
+            }
+            
+            // Time to first token
+            if (benchmark.metrics.time_to_first_token && benchmark.metrics.time_to_first_token.successful) {
+                const ttft = benchmark.metrics.time_to_first_token.successful;
+                html += '<tr>';
+                html += '<td class="label">Time to First Token (s)</td>';
+                html += `<td>${(ttft.mean || 0).toFixed(3)}</td>`;
+                html += `<td>${(ttft.median || 0).toFixed(3)}</td>`;
+                html += `<td>${(ttft.min || 0).toFixed(3)}</td>`;
+                html += `<td>${(ttft.max || 0).toFixed(3)}</td>`;
+                html += `<td>${(ttft.std_dev || 0).toFixed(3)}</td>`;
+                html += '</tr>';
+            }
+            
+            // Inter token latency
+            if (benchmark.metrics.inter_token_latency && benchmark.metrics.inter_token_latency.successful) {
+                const itl = benchmark.metrics.inter_token_latency.successful;
+                html += '<tr>';
+                html += '<td class="label">Inter-Token Latency (ms)</td>';
+                html += `<td>${((itl.mean || 0) * 1000).toFixed(2)}</td>`;
+                html += `<td>${((itl.median || 0) * 1000).toFixed(2)}</td>`;
+                html += `<td>${((itl.min || 0) * 1000).toFixed(2)}</td>`;
+                html += `<td>${((itl.max || 0) * 1000).toFixed(2)}</td>`;
+                html += `<td>${((itl.std_dev || 0) * 1000).toFixed(2)}</td>`;
+                html += '</tr>';
+            }
+            
+            html += '</tbody></table></div>';
+        }
+        
+        // Token Statistics Table
+        if (benchmark.metrics) {
+            html += '<div class="benchmark-table-group">';
+            html += '<h4>📝 Token Statistics</h4>';
+            html += '<table class="benchmark-data-table">';
+            html += '<tbody>';
+            
+            // Output tokens per second
+            if (benchmark.metrics.output_tokens_per_second && benchmark.metrics.output_tokens_per_second.successful) {
+                const otps = benchmark.metrics.output_tokens_per_second.successful;
+                html += `<tr><td class="label">Output Tokens/Second (Mean)</td><td class="value">${(otps.mean || 0).toFixed(2)}</td></tr>`;
+                html += `<tr><td class="label">Output Tokens/Second (Median)</td><td class="value">${(otps.median || 0).toFixed(2)}</td></tr>`;
+            }
+            
+            // Total tokens per second
+            if (benchmark.metrics.total_tokens_per_second && benchmark.metrics.total_tokens_per_second.successful) {
+                const ttps = benchmark.metrics.total_tokens_per_second.successful;
+                html += `<tr><td class="label">Total Tokens/Second (Mean)</td><td class="value">${(ttps.mean || 0).toFixed(2)}</td></tr>`;
+                html += `<tr><td class="label">Total Tokens/Second (Median)</td><td class="value">${(ttps.median || 0).toFixed(2)}</td></tr>`;
+            }
+            
+            // Request output token counts
+            if (benchmark.metrics.request_output_token_count && benchmark.metrics.request_output_token_count.successful) {
+                const rotc = benchmark.metrics.request_output_token_count.successful;
+                html += `<tr><td class="label">Request Output Tokens (Mean)</td><td class="value">${(rotc.mean || 0).toFixed(0)}</td></tr>`;
+                html += `<tr><td class="label">Request Output Tokens (Total)</td><td class="value">${(rotc.total_sum || 0).toFixed(0)}</td></tr>`;
+            }
+            
+            html += '</tbody></table></div>';
+        }
+        
+        // Latency Percentiles Table
+        if (benchmark.metrics && benchmark.metrics.request_latency && benchmark.metrics.request_latency.successful) {
+            const latency = benchmark.metrics.request_latency.successful;
+            if (latency.percentiles) {
+                html += '<div class="benchmark-table-group">';
+                html += '<h4>📈 Request Latency Percentiles</h4>';
+                html += '<table class="benchmark-data-table">';
+                html += '<thead><tr><th>Percentile</th><th>Latency (seconds)</th><th>Latency (ms)</th></tr></thead>';
+                html += '<tbody>';
+                
+                const percentiles = [
+                    { name: 'P50 (Median)', key: 'p50' },
+                    { name: 'P75', key: 'p75' },
+                    { name: 'P90', key: 'p90' },
+                    { name: 'P95', key: 'p95' },
+                    { name: 'P99', key: 'p99' },
+                    { name: 'P99.9', key: 'p999' }
+                ];
+                
+                percentiles.forEach(p => {
+                    if (latency.percentiles[p.key] !== undefined) {
+                        const val = latency.percentiles[p.key];
+                        html += `<tr><td class="label">${p.name}</td><td>${val.toFixed(3)}</td><td>${(val * 1000).toFixed(2)}</td></tr>`;
+                    }
+                });
+                
+                html += '</tbody></table></div>';
+            }
+        }
+        
+        tableContent.innerHTML = html;
+        tableSection.style.display = 'block';
+        console.log('[TABLE] Table displayed successfully');
     }
 
     resetBenchmarkUI() {
@@ -2461,6 +2844,162 @@ class VLLMWebUI {
             } catch (error) {
                 console.error('Failed to copy:', error);
                 this.showNotification('Failed to copy path', 'error');
+            }
+        }
+    }
+    
+    // ============ Benchmark Command Preview ============
+    
+    updateBenchmarkCommandPreview() {
+        const totalRequests = this.elements.benchmarkRequests.value || '100';
+        const requestRate = this.elements.benchmarkRate.value || '5';
+        const promptTokens = this.elements.benchmarkPromptTokens.value || '100';
+        const outputTokens = this.elements.benchmarkOutputTokens.value || '100';
+        const useGuideLLM = this.elements.benchmarkMethodGuidellm.checked;
+        
+        // Get server configuration
+        const host = this.elements.host?.value || 'localhost';
+        const port = this.elements.port?.value || '8000';
+        const targetUrl = `http://${host}:${port}/v1`;
+        
+        let cmd = '';
+        
+        if (useGuideLLM) {
+            // Build GuideLLM command matching the actual command used in app.py
+            cmd = '# Benchmark using GuideLLM\n';
+            cmd += '# Actual command used by the app:\n';
+            cmd += 'guidellm benchmark';
+            cmd += ` \\\n  --target "${targetUrl}"`;
+            
+            // Add rate configuration
+            if (requestRate && requestRate > 0) {
+                cmd += ` \\\n  --rate-type constant`;
+                cmd += ` \\\n  --rate ${requestRate}`;
+            } else {
+                cmd += ` \\\n  --rate-type sweep`;
+            }
+            
+            // Add request limit
+            cmd += ` \\\n  --max-requests ${totalRequests}`;
+            
+            // Add token configuration in guidellm's data format
+            cmd += ` \\\n  --data "prompt_tokens=${promptTokens},output_tokens=${outputTokens}"`;
+        } else {
+            // Built-in benchmark - show Python API equivalent
+            cmd = '# Built-in benchmark (running in the app)\n';
+            cmd += '# Equivalent Python code:\n';
+            cmd += 'import asyncio\n';
+            cmd += 'import aiohttp\n\n';
+            cmd += 'async def benchmark():\n';
+            cmd += '    config = {\n';
+            cmd += `        "total_requests": ${totalRequests},\n`;
+            cmd += `        "request_rate": ${requestRate},\n`;
+            cmd += `        "prompt_tokens": ${promptTokens},\n`;
+            cmd += `        "output_tokens": ${outputTokens}\n`;
+            cmd += '    }\n';
+            cmd += `    url = "${targetUrl}/chat/completions"\n`;
+            cmd += '    # Send requests at specified rate...\n';
+            cmd += '    # Calculate throughput, latency, tokens/sec...\n\n';
+            cmd += '# The built-in benchmark is faster and simpler\n';
+            cmd += '# Use GuideLLM for advanced features & reports';
+        }
+        
+        this.elements.benchmarkCommandText.value = cmd;
+    }
+    
+    async copyBenchmarkCommand() {
+        const command = this.elements.benchmarkCommandText.value;
+        try {
+            await navigator.clipboard.writeText(command);
+            this.showNotification('Benchmark command copied to clipboard!', 'success');
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            this.showNotification('Failed to copy command', 'error');
+        }
+    }
+
+    async copyGuidellmOutput() {
+        const output = this.elements.guidellmRawOutput.value;
+        try {
+            await navigator.clipboard.writeText(output);
+            this.showNotification('GuideLLM output copied to clipboard!', 'success');
+        } catch (error) {
+            console.error('Failed to copy:', error);
+            this.showNotification('Failed to copy output', 'error');
+        }
+    }
+
+    toggleRawOutput() {
+        const content = this.elements.guidellmRawOutputContent;
+        const btn = this.elements.toggleRawOutputBtn;
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            btn.textContent = 'Hide';
+        } else {
+            content.style.display = 'none';
+            btn.textContent = 'Show';
+        }
+    }
+
+    toggleJsonOutput() {
+        const content = this.elements.guidellmJsonOutputContent;
+        const btn = this.elements.toggleJsonOutputBtn;
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            btn.textContent = 'Hide';
+        } else {
+            content.style.display = 'none';
+            btn.textContent = 'Show';
+        }
+    }
+
+    toggleCompressionSection() {
+        const content = this.elements.compressionSectionContent;
+        const btn = this.elements.toggleCompressionSectionBtn;
+        const panel = document.querySelector('#compression-panel');
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            btn.textContent = '▼';
+            btn.classList.remove('collapsed');
+            if (panel) panel.classList.remove('section-collapsed');
+        } else {
+            content.style.display = 'none';
+            btn.textContent = '▶';
+            btn.classList.add('collapsed');
+            if (panel) panel.classList.add('section-collapsed');
+        }
+    }
+
+    toggleMetricsSection() {
+        const content = this.elements.metricsSectionContent;
+        const btn = this.elements.toggleMetricsSectionBtn;
+        const panel = document.querySelector('#metrics-panel');
+        
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            btn.textContent = '▼';
+            btn.classList.remove('collapsed');
+            if (panel) panel.classList.remove('section-collapsed');
+        } else {
+            content.style.display = 'none';
+            btn.textContent = '▶';
+            btn.classList.add('collapsed');
+            if (panel) panel.classList.add('section-collapsed');
+        }
+    }
+
+    async copyGuidellmJson() {
+        const jsonOutput = document.getElementById('guidellm-json-output');
+        if (jsonOutput) {
+            try {
+                await navigator.clipboard.writeText(jsonOutput.textContent);
+                this.showNotification('GuideLLM JSON copied to clipboard!', 'success');
+            } catch (error) {
+                console.error('Failed to copy:', error);
+                this.showNotification('Failed to copy JSON', 'error');
             }
         }
     }

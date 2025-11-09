@@ -387,13 +387,17 @@
         <section class="compression-section resizable" id="compression-panel">
             <div class="panel">
                 <div class="panel-header">
-                    <h2>🔧 Model Compression (LLM-Compressor)</h2>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button id="toggle-compression-section-btn" class="btn btn-secondary btn-sm section-toggle-btn" title="Show/Hide section">▼</button>
+                        <h2>🔧 Model Compression (LLM-Compressor)</h2>
+                    </div>
                     <div class="compression-controls">
                         <button id="run-compression-btn" class="btn btn-primary btn-sm">Compress Model</button>
                         <button id="stop-compression-btn" class="btn btn-danger btn-sm" disabled style="display: none;">Stop</button>
                     </div>
                 </div>
 
+                <div id="compression-section-content">
                 <!-- Two-Column Layout -->
                 <div class="compression-content-layout">
                     <!-- Left Column: Presets and Info -->
@@ -574,6 +578,7 @@
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
         </section>
 
@@ -584,15 +589,37 @@
         <section class="metrics-section resizable" id="metrics-panel">
             <div class="panel">
                 <div class="panel-header">
-                    <h2>📊 Performance Metrics (GuideLLM)</h2>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <button id="toggle-metrics-section-btn" class="btn btn-secondary btn-sm section-toggle-btn" title="Show/Hide section">▼</button>
+                        <h2>📊 Performance Metrics (GuideLLM)</h2>
+                    </div>
                     <div class="metrics-controls">
                         <button id="run-benchmark-btn" class="btn btn-primary btn-sm" disabled>Run Benchmark</button>
                         <button id="stop-benchmark-btn" class="btn btn-danger btn-sm" disabled style="display: none;">Stop</button>
                     </div>
                 </div>
 
+                <div id="metrics-section-content">
                 <!-- Benchmark Configuration -->
                 <div class="benchmark-config">
+                    <!-- Benchmark Method Selection -->
+                    <div class="config-row" style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #2a3142;">
+                        <div class="config-item" style="flex: 1;">
+                            <label style="font-weight: 600; margin-bottom: 8px; display: block;">Benchmark Method:</label>
+                            <div style="display: flex; gap: 20px;">
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="radio" name="benchmark-method" id="benchmark-method-builtin" value="builtin" checked style="margin-right: 8px;">
+                                    <span>Built-in (Fast)</span>
+                                </label>
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="radio" name="benchmark-method" id="benchmark-method-guidellm" value="guidellm" style="margin-right: 8px;">
+                                    <span>GuideLLM (Advanced)</span>
+                                </label>
+                            </div>
+                            <small class="form-help" style="display: block; margin-top: 5px;">Built-in: Fast & simple. GuideLLM: More detailed metrics & HTML reports</small>
+                        </div>
+                    </div>
+                    
                     <div class="config-row">
                         <div class="config-item">
                             <label for="benchmark-requests">Total Requests:</label>
@@ -610,6 +637,56 @@
                             <label for="benchmark-output-tokens">Output Tokens:</label>
                             <input type="number" id="benchmark-output-tokens" class="form-control-sm" value="100" min="10" max="2048">
                         </div>
+                    </div>
+                </div>
+
+                <!-- Command Preview Section -->
+                <div class="command-preview-section" style="margin-top: 15px;">
+                    <div class="command-preview-header">
+                        <h3>Command Preview</h3>
+                        <button id="copy-benchmark-command-btn" class="btn btn-secondary btn-sm" title="Copy command">Copy</button>
+                    </div>
+                    <textarea id="benchmark-command-text" class="command-preview-textarea" rows="6" spellcheck="false" readonly>guidellm --target http://localhost:8000/v1 --rate 5 --max-requests 100</textarea>
+                    <small class="command-help">Equivalent GuideLLM command for this benchmark configuration</small>
+                </div>
+
+                <!-- Raw GuideLLM Output Section -->
+                <div class="command-preview-section" id="guidellm-raw-output-section" style="margin-top: 15px; display: none;">
+                    <div class="command-preview-header">
+                        <h3>GuideLLM Raw Output</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="toggle-raw-output-btn" class="btn btn-secondary btn-sm" title="Hide/Show raw output">Hide</button>
+                            <button id="copy-guidellm-output-btn" class="btn btn-secondary btn-sm" title="Copy output">Copy</button>
+                        </div>
+                    </div>
+                    <div id="guidellm-raw-output-content">
+                        <textarea id="guidellm-raw-output" class="command-preview-textarea" rows="15" spellcheck="false" readonly style="font-family: monospace; font-size: 11px;"></textarea>
+                        <small class="command-help">Complete output from GuideLLM benchmark</small>
+                    </div>
+                </div>
+
+                <!-- GuideLLM JSON Output Section -->
+                <div class="command-preview-section" id="guidellm-json-output-section" style="margin-top: 15px; display: none;">
+                    <div class="command-preview-header">
+                        <h3>📊 GuideLLM Benchmark Results (JSON)</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="toggle-json-output-btn" class="btn btn-secondary btn-sm" title="Hide/Show JSON output">Hide</button>
+                            <button id="copy-guidellm-json-btn" class="btn btn-secondary btn-sm" title="Copy JSON">Copy</button>
+                        </div>
+                    </div>
+                    <div id="guidellm-json-output-content">
+                        <pre id="guidellm-json-output" class="json-display" style="background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 6px; max-height: 500px; overflow: auto; font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 12px; line-height: 1.5; margin: 0;"></pre>
+                        <small class="command-help">Structured benchmark data in JSON format</small>
+                    </div>
+                </div>
+
+                <!-- GuideLLM Table View Section -->
+                <div class="benchmark-table-section" id="guidellm-table-section" style="margin-top: 15px; display: none;">
+                    <div class="command-preview-header">
+                        <h3>📈 Benchmark Summary Table</h3>
+                    </div>
+                    <div id="guidellm-table-content" class="table-container">
+                        <!-- Tables will be populated here by JavaScript -->
                     </div>
                 </div>
 
@@ -643,7 +720,7 @@
                     <div class="metric-card">
                         <div class="metric-icon">📝</div>
                         <div class="metric-label">Token Throughput</div>
-                        <div class="metric-value" id="metric-tokens-per-sec">-- tok/s</div>
+                        <div class="metric-value" id="benchmark-tokens-per-sec">-- tok/s</div>
                         <div class="metric-subtext">Output tokens per second</div>
                     </div>
 
@@ -675,7 +752,7 @@
                     <div class="metric-card">
                         <div class="metric-icon">💬</div>
                         <div class="metric-label">Total Tokens</div>
-                        <div class="metric-value" id="metric-total-tokens">--</div>
+                        <div class="metric-value" id="benchmark-total-tokens">--</div>
                         <div class="metric-subtext">Input + Output tokens</div>
                     </div>
 
@@ -697,6 +774,7 @@
                         <span id="progress-status">Running benchmark...</span>
                         <span id="progress-percent">0%</span>
                     </div>
+                </div>
                 </div>
             </div>
         </section>
