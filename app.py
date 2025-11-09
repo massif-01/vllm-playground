@@ -128,7 +128,7 @@ class CompressionConfig(BaseModel):
     
     # Quantization format
     quantization_format: Literal[
-        "W8A8_INT8", "W8A8_FP8", "W4A16", "W8A16", "FP4_W4A16", "FP4_W4A4", "W4A4"
+        "W8A8_INT8", "W8A8_FP8", "W4A16", "W4A16_ASYM", "FP4_W4A16", "FP4_W4A4"
     ] = "W8A8_INT8"
     
     # Algorithm selection
@@ -2361,15 +2361,14 @@ def build_compression_recipe(config: CompressionConfig) -> List:
     ignore = [layer.strip() for layer in (config.ignore_layers or "lm_head").split(",")]
     
     # Build scheme based on quantization format
-    # Note: FP8 requires QuantizationModifier with explicit config, not GPTQModifier
+    # Note: FP8 and FP4 require QuantizationModifier with explicit config, not GPTQModifier
     scheme_map = {
         "W8A8_INT8": "W8A8",
         "W8A8_FP8": None,  # Handled separately below
         "W4A16": "W4A16",
-        "W8A16": "W8A16",
-        "FP4_W4A16": "W4A16",  # FP4 is handled by vLLM
-        "FP4_W4A4": "W4A4",
-        "W4A4": "W4A4",
+        "W4A16_ASYM": "W4A16_ASYM",
+        "FP4_W4A16": None,  # Handled separately below (NVFP4A16)
+        "FP4_W4A4": None,   # Handled separately below (NVFP4)
     }
     
     scheme = scheme_map.get(config.quantization_format, "W8A8")
@@ -2400,7 +2399,50 @@ def build_compression_recipe(config: CompressionConfig) -> List:
                 ignore=ignore
             )
         )
-    # Add quantization modifier based on algorithm for non-FP8 formats
+    # Handle FP4 W4A16 (NVFP4A16 - 4-bit FP4 weights, 16-bit activations)
+    elif config.quantization_format == "FP4_W4A16":
+        recipe.append(
+            QuantizationModifier(
+                targets=targets,
+                scheme={
+                    "weights": {
+                        "num_bits": 4,
+                        "type": "float",
+                        "symmetric": True,
+                        "strategy": "tensor",
+                    },
+                    "input_activations": {
+                        "num_bits": 16,
+                        "type": "float",
+                        "symmetric": True,
+                    }
+                },
+                ignore=ignore
+            )
+        )
+    # Handle FP4 W4A4 (NVFP4 - 4-bit FP4 weights and activations)
+    elif config.quantization_format == "FP4_W4A4":
+        recipe.append(
+            QuantizationModifier(
+                targets=targets,
+                scheme={
+                    "weights": {
+                        "num_bits": 4,
+                        "type": "float",
+                        "symmetric": True,
+                        "strategy": "tensor",
+                    },
+                    "input_activations": {
+                        "num_bits": 4,
+                        "type": "float",
+                        "symmetric": True,
+                        "strategy": "tensor",
+                    }
+                },
+                ignore=ignore
+            )
+        )
+    # Add quantization modifier based on algorithm for INT-based formats
     elif config.algorithm in ["GPTQ", "SmoothQuant", "PTQ"]:
         recipe.append(
             GPTQModifier(

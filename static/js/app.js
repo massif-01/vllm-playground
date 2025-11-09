@@ -3034,7 +3034,7 @@ class VLLMWebUI {
         }
         
         // Import both modifiers, but use appropriate one based on format
-        if (format === 'W8A8_FP8') {
+        if (format === 'W8A8_FP8' || format === 'FP4_W4A16' || format === 'FP4_W4A4') {
             cmd += 'from llmcompressor.modifiers.quantization import QuantizationModifier\n\n';
         } else {
             cmd += 'from llmcompressor.modifiers.quantization import GPTQModifier\n\n';
@@ -3064,10 +3064,9 @@ class VLLMWebUI {
             'W8A8_INT8': 'W8A8',
             'W8A8_FP8': null,  // Handled separately
             'W4A16': 'W4A16',
-            'W8A16': 'W8A16',
-            'FP4_W4A16': 'W4A16',
-            'FP4_W4A4': 'W4A4',
-            'W4A4': 'W4A4',
+            'W4A16_ASYM': 'W4A16_ASYM',
+            'FP4_W4A16': null,  // Handled separately
+            'FP4_W4A4': null,   // Handled separately
         };
         const scheme = schemeMap[format];
         
@@ -3085,6 +3084,45 @@ class VLLMWebUI {
             cmd += `                "num_bits": 8,\n`;
             cmd += `                "type": "float",\n`;
             cmd += `                "symmetric": True,\n`;
+            cmd += `            }\n`;
+            cmd += `        },\n`;
+            cmd += `        ignore=["${ignoreLayers}"]\n`;
+            cmd += `    )\n`;
+        } else if (format === 'FP4_W4A16') {
+            // NVFP4A16 - 4-bit FP4 weights, 16-bit activations
+            cmd += `    QuantizationModifier(\n`;
+            cmd += `        targets="${targetLayers}",\n`;
+            cmd += `        scheme={\n`;
+            cmd += `            "weights": {\n`;
+            cmd += `                "num_bits": 4,\n`;
+            cmd += `                "type": "float",\n`;
+            cmd += `                "symmetric": True,\n`;
+            cmd += `                "strategy": "tensor",\n`;
+            cmd += `            },\n`;
+            cmd += `            "input_activations": {\n`;
+            cmd += `                "num_bits": 16,\n`;
+            cmd += `                "type": "float",\n`;
+            cmd += `                "symmetric": True,\n`;
+            cmd += `            }\n`;
+            cmd += `        },\n`;
+            cmd += `        ignore=["${ignoreLayers}"]\n`;
+            cmd += `    )\n`;
+        } else if (format === 'FP4_W4A4') {
+            // NVFP4 - 4-bit FP4 weights and activations
+            cmd += `    QuantizationModifier(\n`;
+            cmd += `        targets="${targetLayers}",\n`;
+            cmd += `        scheme={\n`;
+            cmd += `            "weights": {\n`;
+            cmd += `                "num_bits": 4,\n`;
+            cmd += `                "type": "float",\n`;
+            cmd += `                "symmetric": True,\n`;
+            cmd += `                "strategy": "tensor",\n`;
+            cmd += `            },\n`;
+            cmd += `            "input_activations": {\n`;
+            cmd += `                "num_bits": 4,\n`;
+            cmd += `                "type": "float",\n`;
+            cmd += `                "symmetric": True,\n`;
+            cmd += `                "strategy": "tensor",\n`;
             cmd += `            }\n`;
             cmd += `        },\n`;
             cmd += `        ignore=["${ignoreLayers}"]\n`;
