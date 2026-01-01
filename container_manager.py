@@ -350,41 +350,58 @@ class VLLMContainerManager:
         config_str = json.dumps(vllm_config, sort_keys=True)
         return hashlib.md5(config_str.encode()).hexdigest()
     
-    async def _should_recreate_container(self, vllm_config: Dict[str, Any]) -> bool:
+    async def _should_recreate_container(self, vllm_config: Dict[str, Any], expected_image: str) -> bool:
         """
-        Check if container needs to be recreated due to config change
+        Check if container needs to be recreated due to config or image change
         
         Args:
             vllm_config: New vLLM configuration
+            expected_image: The container image that should be used
             
         Returns:
             True if container should be recreated, False if can reuse existing
         """
         try:
-            # Check if container exists
+            # Check if container exists and get both config hash and image
             result = await self._run_podman_cmd_async(
                 "inspect", self.CONTAINER_NAME,
-                "--format", "{{index .Config.Labels \"vllm.config.hash\"}}",
+                "--format", "{{index .Config.Labels \"vllm.config.hash\"}}|{{.Config.Image}}|{{index .Config.Labels \"vllm.image\"}}",
                 check=False
             )
             
             if result.returncode != 0:
                 # Container doesn't exist
+                logger.info("Container doesn't exist - will create new container")
                 return True
             
-            # Get stored config hash
-            stored_hash = result.stdout.strip()
+            # Parse the output: stored_hash|container_image|stored_image_label
+            output = result.stdout.strip()
+            parts = output.split('|')
+            stored_hash = parts[0] if len(parts) > 0 else ""
+            container_image = parts[1] if len(parts) > 1 else ""
+            stored_image_label = parts[2] if len(parts) > 2 else ""
+            
+            # Use the stored image label if available, otherwise use container image
+            stored_image = stored_image_label if stored_image_label else container_image
             
             # Calculate current config hash
             current_hash = await self._get_container_config_hash(vllm_config)
             
+            # Check if config changed
             if stored_hash != current_hash:
                 logger.info(f"Configuration changed - will recreate container")
                 logger.info(f"  Old hash: {stored_hash}")
                 logger.info(f"  New hash: {current_hash}")
                 return True
             
-            logger.info(f"Configuration unchanged - will reuse existing container")
+            # Check if image changed (critical for CPU/GPU mode switching)
+            if stored_image != expected_image:
+                logger.info(f"Container image changed - will recreate container")
+                logger.info(f"  Current image: {stored_image}")
+                logger.info(f"  Required image: {expected_image}")
+                return True
+            
+            logger.info(f"Configuration and image unchanged - will reuse existing container")
             return False
             
         except Exception as e:
@@ -492,7 +509,8 @@ class VLLMContainerManager:
         
         try:
             # Check if we need to recreate the container
-            should_recreate = await self._should_recreate_container(vllm_config)
+            # Pass expected image to detect CPU/GPU mode changes
+            should_recreate = await self._should_recreate_container(vllm_config, image)
             
             if not should_recreate:
                 # Container exists with same config - just restart it
@@ -572,8 +590,9 @@ class VLLMContainerManager:
                 # Use host IPC namespace for vLLM shared memory (inter-process communication)
                 "--ipc=host",
                 # NOTE: Removed --rm flag to keep container for reuse
-                # Add label to track configuration
+                # Add labels to track configuration and image for change detection
                 "--label", f"vllm.config.hash={config_hash}",
+                "--label", f"vllm.image={image}",
             ]
             
             # Add GPU passthrough if not in CPU mode
