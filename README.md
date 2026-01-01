@@ -410,6 +410,11 @@ nano config/vllm_cpu.env
   - **Regex**: Match output to regex patterns (email, phone, date formats)
   - **JSON Schema**: Generate valid JSON matching your schema
   - **Grammar (EBNF)**: Define complex output structures
+  
+  ![Structured Outputs](assets/vllm-playground-structured-outputs.png)
+  
+  *Structured Outputs with Choice mode for sentiment analysis - responses constrained to "positive", "negative", or "neutral"*
+
 - **🔧 Tool Calling / Function Calling**: Define custom tools for the model 🆕
   - Server-side configuration: Enable in Server Configuration panel before starting
   - Auto-detected parsers: Llama 3.x, Mistral, Hermes, Qwen, Granite, InternLM
