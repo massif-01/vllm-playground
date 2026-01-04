@@ -220,47 +220,146 @@ const MCPMethods = {
         
         const statusClass = config.connected ? 'connected' : (config.error ? 'error' : 'disconnected');
         const transportInfo = config.transport === 'stdio' 
-            ? `${config.command || ''} ${(config.args || []).slice(0, 2).join(' ')}${(config.args || []).length > 2 ? '...' : ''}` 
-            : (config.url || '').replace(/^https?:\/\//, '');
+            ? `${config.command || ''} ${(config.args || []).join(' ')}` 
+            : (config.url || '');
+        
+        // Build capability summary for connected servers
+        const toolsCount = config.tools_count || 0;
+        const resourcesCount = config.resources_count || 0;
+        const promptsCount = config.prompts_count || 0;
+        
+        const capabilitySummary = config.connected ? `
+            <div class="server-capabilities">
+                <span class="capability-badge" title="Tools"><span class="icon-mcp-tools"></span> ${toolsCount}</span>
+                <span class="capability-badge" title="Resources"><span class="icon-mcp-resources"></span> ${resourcesCount}</span>
+                <span class="capability-badge" title="Prompts"><span class="icon-mcp-prompts"></span> ${promptsCount}</span>
+            </div>
+        ` : '';
         
         card.innerHTML = `
             <div class="server-card-header">
-                <div class="server-name">
+                <div class="server-header-left">
+                    <span class="server-name-text">${this.escapeHtml(config.name)}</span>
                     <span class="status-dot ${statusClass}"></span>
-                    <span>${this.escapeHtml(config.name)}</span>
+                    <span class="server-command">${this.escapeHtml(transportInfo)}</span>
                 </div>
+                ${capabilitySummary}
                 <div class="server-card-actions">
-                    ${config.connected 
-                        ? `<button class="btn btn-secondary btn-sm" onclick="window.vllmUI.disconnectMCPServer('${config.name}')" title="Disconnect">⏹</button>`
-                        : `<button class="btn btn-primary btn-sm" onclick="window.vllmUI.connectMCPServer('${config.name}')" title="Connect">▶</button>`
-                    }
-                    <button class="btn btn-secondary btn-sm" onclick="window.vllmUI.editMCPServer('${config.name}')" title="Edit">✏</button>
-                    <button class="btn btn-secondary btn-sm" onclick="window.vllmUI.deleteMCPServer('${config.name}')" title="Delete">✕</button>
+                    <button class="btn btn-icon-only" onclick="window.vllmUI.editMCPServer('${config.name}')" title="Edit">
+                        <span class="icon-mcp-edit"></span>
+                    </button>
+                    <button class="btn btn-icon-only btn-danger-icon" onclick="window.vllmUI.deleteMCPServer('${config.name}')" title="Delete">
+                        <span class="icon-mcp-delete"></span>
+                    </button>
+                    <button class="mcp-toggle-btn ${config.connected ? 'connected' : ''}" 
+                            onclick="event.stopPropagation(); window.vllmUI.toggleMCPServer('${config.name}')" 
+                            title="${config.connected ? 'Click to disconnect' : 'Click to connect'}">
+                        <span class="toggle-track">
+                            <span class="toggle-thumb"></span>
+                        </span>
+                    </button>
                 </div>
             </div>
-            <div class="server-card-body">
-                <div class="server-info">
-                    <div class="info-row">
-                        <span class="info-label">${config.transport.toUpperCase()}:</span>
-                        <span class="info-value" title="${this.escapeHtml(config.transport === 'stdio' ? (config.command + ' ' + (config.args || []).join(' ')) : config.url)}">${this.escapeHtml(transportInfo)}</span>
-                    </div>
-                </div>
-                ${config.error ? `<div class="server-error">${this.escapeHtml(config.error)}</div>` : ''}
+            ${config.error ? `<div class="server-error-inline">${this.escapeHtml(config.error)}</div>` : ''}
+            <div class="server-details-panel" id="mcp-details-${config.name}" style="display: none;">
+                <div class="details-loading">Loading...</div>
             </div>
-            <div class="server-card-footer">
-                <span class="tools-badge ${config.tools_count > 0 ? 'has-tools' : ''}">
-                    <span class="icon-mcp-tools"></span> ${config.tools_count || 0}
-                </span>
-                <div class="footer-actions">
-                    ${config.connected 
-                        ? `<button class="btn btn-secondary btn-sm" onclick="window.vllmUI.openMCPDetails('${config.name}')" title="View Tools">View</button>`
-                        : ``
-                    }
+            ${config.connected ? `
+                <div class="server-expand-toggle" onclick="window.vllmUI.toggleMCPServerDetails('${config.name}')">
+                    <span class="expand-text">Show details</span>
+                    <span class="expand-icon">▼</span>
                 </div>
-            </div>
+            ` : ''}
         `;
         
         return card;
+    },
+    
+    async toggleMCPServerDetails(name) {
+        const panel = document.getElementById(`mcp-details-${name}`);
+        const card = panel?.closest('.mcp-server-card');
+        
+        if (!panel || !card) return;
+        
+        const isExpanded = card.classList.contains('expanded');
+        
+        if (isExpanded) {
+            // Collapse
+            card.classList.remove('expanded');
+            panel.style.display = 'none';
+            const toggle = card.querySelector('.server-expand-toggle');
+            if (toggle) {
+                toggle.querySelector('.expand-text').textContent = 'Show tools & resources';
+                toggle.querySelector('.expand-icon').textContent = '▼';
+            }
+        } else {
+            // Expand and load details
+            card.classList.add('expanded');
+            panel.style.display = 'block';
+            panel.innerHTML = '<div class="details-loading">Loading...</div>';
+            
+            const toggle = card.querySelector('.server-expand-toggle');
+            if (toggle) {
+                toggle.querySelector('.expand-text').textContent = 'Show less';
+                toggle.querySelector('.expand-icon').textContent = '▲';
+            }
+            
+            await this.loadInlineServerDetails(name, panel);
+        }
+    },
+    
+    async loadInlineServerDetails(name, panel) {
+        try {
+            const response = await fetch(`/api/mcp/servers/${encodeURIComponent(name)}/details`);
+            if (!response.ok) throw new Error('Failed to load');
+            
+            const data = await response.json();
+            const tools = data.tools || [];
+            const resources = data.resources || [];
+            const prompts = data.prompts || [];
+            
+            let html = '';
+            
+            // Tools as badges
+            if (tools.length > 0) {
+                html += '<div class="inline-tools-section">';
+                html += tools.map(tool => `
+                    <span class="tool-badge" title="${this.escapeHtml(tool.description || '')}">${this.escapeHtml(tool.name)}</span>
+                `).join('');
+                html += '</div>';
+            }
+            
+            // Resources as cards
+            if (resources.length > 0) {
+                html += '<div class="inline-resources-section">';
+                html += resources.map(res => `
+                    <span class="resource-card" title="${this.escapeHtml(res.uri || '')}">
+                        <span class="resource-icon">📄</span> ${this.escapeHtml(res.name || res.uri)}
+                    </span>
+                `).join('');
+                html += '</div>';
+            }
+            
+            // Prompts as cards
+            if (prompts.length > 0) {
+                html += '<div class="inline-prompts-section">';
+                html += prompts.map(prompt => `
+                    <span class="prompt-card" title="${this.escapeHtml(prompt.description || '')}">
+                        <span class="prompt-icon">💬</span> ${this.escapeHtml(prompt.name)}
+                    </span>
+                `).join('');
+                html += '</div>';
+            }
+            
+            if (!html) {
+                html = '<div class="no-capabilities">No tools, resources, or prompts available</div>';
+            }
+            
+            panel.innerHTML = html;
+            
+        } catch (error) {
+            panel.innerHTML = `<div class="details-error">Error loading details: ${this.escapeHtml(error.message)}</div>`;
+        }
     },
     
     renderMCPPresetsGrid() {
@@ -526,6 +625,15 @@ const MCPMethods = {
     // ============================================
     // Connection Management
     // ============================================
+    
+    async toggleMCPServer(name) {
+        const config = this.mcpConfigs.find(c => c.name === name);
+        if (config && config.connected) {
+            await this.disconnectMCPServer(name);
+        } else {
+            await this.connectMCPServer(name);
+        }
+    },
     
     async connectMCPServer(name) {
         this.showNotification(`Connecting to "${name}"...`, 'info');

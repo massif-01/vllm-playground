@@ -213,20 +213,61 @@ class MCPServerConnection:
         logger.info(f"Disconnected from MCP server '{self.config.name}'")
     
     async def _cleanup(self):
-        """Clean up connection resources"""
-        try:
-            if self._session_context:
-                await self._session_context.__aexit__(None, None, None)
-                self._session_context = None
-            if self._client_context:
-                await self._client_context.__aexit__(None, None, None)
-                self._client_context = None
-        except Exception as e:
-            logger.warning(f"Cleanup error for '{self.config.name}': {e}")
-        finally:
-            self.session = None
-            self._read = None
-            self._write = None
+        """
+        Clean up connection resources.
+        
+        Note: The MCP client uses anyio task groups which require exit from 
+        the same task that entered. We handle this by:
+        1. Closing streams to signal the subprocess
+        2. Explicitly closing async generators to prevent GC-triggered errors
+        3. Suppressing the inevitable cancel scope errors
+        """
+        import asyncio
+        
+        # Try to close the write stream to signal the server to exit
+        if self._write:
+            try:
+                if hasattr(self._write, 'aclose'):
+                    await self._write.aclose()
+            except Exception:
+                pass
+        
+        # Try to close the read stream
+        if self._read:
+            try:
+                if hasattr(self._read, 'aclose'):
+                    await self._read.aclose()
+            except Exception:
+                pass
+        
+        # Try to explicitly close async generator contexts to prevent
+        # the "Task exception was never retrieved" error during GC.
+        # This will still raise the cancel scope error, but we catch it here
+        # instead of letting it bubble up through asyncio's error handler.
+        for ctx in [self._session_context, self._client_context]:
+            if ctx is not None:
+                try:
+                    # If it's an async generator, close it
+                    if hasattr(ctx, 'aclose'):
+                        await ctx.aclose()
+                    elif hasattr(ctx, '__aexit__'):
+                        # Suppress errors from __aexit__
+                        try:
+                            await ctx.__aexit__(None, None, None)
+                        except RuntimeError:
+                            # Expected: "Attempted to exit cancel scope in a different task"
+                            pass
+                except (RuntimeError, GeneratorExit, Exception):
+                    # Suppress all cleanup errors - the important thing is
+                    # that we've signaled the subprocess to exit
+                    pass
+        
+        # Clear all references
+        self.session = None
+        self._session_context = None
+        self._client_context = None
+        self._read = None
+        self._write = None
     
     def get_status(self) -> MCPServerStatus:
         """Get the current status of this connection"""

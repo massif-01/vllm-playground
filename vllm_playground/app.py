@@ -42,6 +42,26 @@ except ImportError:
 
 app = FastAPI(title="vLLM Playground", version="1.0.0")
 
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Clean up MCP connections on shutdown"""
+    logger.info("Shutting down - cleaning up MCP connections...")
+    try:
+        # Check if MCP is available (these are defined later in the file)
+        if 'get_mcp_manager' in globals() and get_mcp_manager is not None:
+            manager = get_mcp_manager()
+            # Disconnect all connected servers
+            for name in list(manager.connections.keys()):
+                try:
+                    await manager.disconnect(name)
+                except Exception as e:
+                    logger.debug(f"Error disconnecting MCP server '{name}': {e}")
+    except Exception as e:
+        logger.debug(f"Error during MCP cleanup: {e}")
+    logger.info("MCP cleanup complete")
+
+
 # Get base directory
 BASE_DIR = Path(__file__).parent
 
