@@ -3271,8 +3271,11 @@ ${fullText.substring(0, 200)}${fullText.length > 200 ? '...' : ''}`;
             // GPU mode: use openai.api_server
             const gpuDevice = this.elements.gpuDevice.value.trim();
             
+            // Initialize cmd for GPU mode
+            cmd = '';
+            
             if (gpuDevice) {
-                cmd = `# GPU Device Selection:\n`;
+                cmd += `# GPU Device Selection:\n`;
                 cmd += `export CUDA_VISIBLE_DEVICES=${gpuDevice}\n\n`;
             }
             
@@ -3280,6 +3283,7 @@ ${fullText.substring(0, 200)}${fullText.length > 200 ? '...' : ''}`;
                 cmd += `# Set HF token for gated models:\n`;
                 cmd += `export HF_TOKEN=[YOUR_TOKEN]\n\n`;
             }
+            
             cmd += `python -m vllm.entrypoints.openai.api_server`;
             cmd += ` \\\n  --model ${model}`;
             cmd += ` \\\n  --host ${host}`;
@@ -3341,8 +3345,8 @@ ${fullText.substring(0, 200)}${fullText.length > 200 ? '...' : ''}`;
             }
         }
         
-        // Add chat template flag (vLLM requires this for /v1/chat/completions)
-        cmd += ` \\\n  --chat-template <auto-detected-or-custom>`;
+        // Note: vLLM automatically loads chat templates from model's tokenizer_config.json
+        // No need to specify --chat-template manually
         
         // Update the display (use value for textarea)
         this.elements.commandText.value = cmd;
