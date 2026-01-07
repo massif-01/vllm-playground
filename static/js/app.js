@@ -1315,28 +1315,18 @@ number ::= [0-9]+`
             // Log hardware capabilities
             console.log('Hardware capabilities:', capabilities);
             
-            // Disable GPU option if GPU is not available
+            // Handle GPU detection result (but don't force disable - allow manual selection)
             if (!capabilities.gpu_available) {
-                // Disable GPU radio button
-                this.elements.modeGpu.disabled = true;
-                this.elements.modeGpuLabel.classList.add('disabled');
-                this.elements.modeGpuLabel.title = 'GPU not available on this system. Requires CUDA-capable GPU and drivers.';
-                this.elements.modeGpuLabel.style.opacity = '0.5';
-                this.elements.modeGpuLabel.style.cursor = 'not-allowed';
+                // GPU not detected - show warning but still allow selection
+                // User may know their server has GPU even if detection fails
+                this.elements.modeGpuLabel.title = 'GPU not auto-detected. You can still select GPU mode if your server has a GPU.';
                 
-                // Force CPU mode
-                this.elements.modeCpu.checked = true;
-                this.toggleComputeMode();
-                
-                // Update help text
-                this.elements.modeHelpText.innerHTML = '⚠️ GPU not available - Running in CPU-only mode';
+                // Update help text with warning
+                this.elements.modeHelpText.innerHTML = '⚠️ GPU not auto-detected. Select GPU if your server has one.';
                 this.elements.modeHelpText.style.color = '#f59e0b';
                 
-                // Hide GPU status display
-                document.getElementById('gpu-status-display').style.display = 'none';
-                
-                console.warn('GPU is not available on this system');
-                this.addLog('[SYSTEM] GPU not detected - GPU mode disabled', 'warning');
+                console.warn('GPU not auto-detected (detection method: ' + capabilities.detection_method + ')');
+                this.addLog('[SYSTEM] GPU not auto-detected - Manual selection available', 'warning');
             } else {
                 // GPU is available
                 console.log('GPU is available on this system');

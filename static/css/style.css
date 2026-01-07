@@ -5960,8 +5960,8 @@ a, button, input, select, textarea, .btn, .nav-item, .panel, .card, .form-contro
     transform: translateY(-1px);
 }
 
-.language-flag {
-    font-size: 18px;
+.language-icon {
+    font-size: 16px;
     line-height: 1;
 }
 
@@ -6033,9 +6033,6 @@ a, button, input, select, textarea, .btn, .nav-item, .panel, .card, .form-contro
     background: var(--primary-hover);
 }
 
-.language-dropdown-item .language-flag {
-    font-size: 20px;
-}
 
 .language-dropdown-item .language-name {
     flex: 1;

@@ -19,12 +19,10 @@ class I18n {
         this.availableLocales = {
             'en': {
                 name: 'English',
-                flag: '🇬🇧',
                 nativeName: 'English'
             },
             'zh-CN': {
                 name: 'Chinese (Simplified)',
-                flag: '🇨🇳',
                 nativeName: '简体中文'
             }
         };
@@ -37,12 +35,13 @@ class I18n {
         // Store original texts before any translation
         this.storeOriginalTexts();
         
-        // Load saved language or detect from browser
+        // Load saved language preference (no auto-detection, default to English)
         const savedLocale = localStorage.getItem('vllm-locale');
-        const browserLocale = this.detectBrowserLocale();
         
-        // Priority: saved > browser > default
-        let locale = savedLocale || browserLocale || this.defaultLocale;
+        // Priority: saved > default (English)
+        // Note: We intentionally don't auto-detect browser language
+        // First visit always shows English, user can manually switch
+        let locale = savedLocale || this.defaultLocale;
         
         // Ensure locale is available
         if (!this.availableLocales[locale]) {
@@ -314,7 +313,7 @@ class I18n {
         
         const currentLocale = this.availableLocales[this.currentLocale];
         button.innerHTML = `
-            <span class="language-flag">${currentLocale.flag}</span>
+            <span class="language-icon">🌐</span>
             <span class="language-label">${currentLocale.nativeName}</span>
             <span class="language-dropdown-icon">▼</span>
         `;
@@ -333,7 +332,6 @@ class I18n {
             }
             item.setAttribute('data-locale', locale);
             item.innerHTML = `
-                <span class="language-flag">${localeInfo.flag}</span>
                 <span class="language-name">${localeInfo.nativeName}</span>
                 ${locale === this.currentLocale ? '<span class="language-check">✓</span>' : ''}
             `;
@@ -376,7 +374,7 @@ class I18n {
         if (button && dropdown) {
             const currentLocale = this.availableLocales[this.currentLocale];
             button.innerHTML = `
-                <span class="language-flag">${currentLocale.flag}</span>
+                <span class="language-icon">🌐</span>
                 <span class="language-label">${currentLocale.nativeName}</span>
                 <span class="language-dropdown-icon">▼</span>
             `;
@@ -388,14 +386,12 @@ class I18n {
                 if (locale === this.currentLocale) {
                     item.classList.add('active');
                     item.innerHTML = `
-                        <span class="language-flag">${localeInfo.flag}</span>
                         <span class="language-name">${localeInfo.nativeName}</span>
                         <span class="language-check">✓</span>
                     `;
                 } else {
                     item.classList.remove('active');
                     item.innerHTML = `
-                        <span class="language-flag">${localeInfo.flag}</span>
                         <span class="language-name">${localeInfo.nativeName}</span>
                     `;
                 }
