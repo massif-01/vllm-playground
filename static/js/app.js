@@ -245,6 +245,9 @@ class VLLMWebUI {
         // Initialize view switching
         this.initViewSwitching();
         
+        // Initialize i18n (language system) - must be before theme to ensure translations are available
+        this.initI18n();
+        
         // Initialize theme
         this.initTheme();
         
@@ -449,20 +452,21 @@ class VLLMWebUI {
     applyTheme(theme) {
         const icon = this.elements.themeToggle?.querySelector('.theme-icon');
         const label = this.elements.themeToggle?.querySelector('.theme-label');
+        const t = (key) => window.i18n ? window.i18n.t(key) : key;
         
         if (theme === 'light') {
             document.documentElement.setAttribute('data-theme', 'light');
             if (icon) icon.textContent = '◑';
-            if (label) label.textContent = 'Light';
+            if (label) label.textContent = t('theme.light');
             if (this.elements.themeToggle) {
-                this.elements.themeToggle.title = 'Switch to dark mode';
+                this.elements.themeToggle.title = t('theme.toggle');
             }
         } else {
             document.documentElement.removeAttribute('data-theme');
             if (icon) icon.textContent = '◐';
-            if (label) label.textContent = 'Dark';
+            if (label) label.textContent = t('theme.dark');
             if (this.elements.themeToggle) {
-                this.elements.themeToggle.title = 'Switch to light mode';
+                this.elements.themeToggle.title = t('theme.toggle');
             }
         }
         this.currentTheme = theme;
@@ -473,6 +477,72 @@ class VLLMWebUI {
         this.applyTheme(newTheme);
         localStorage.setItem('vllm-theme', newTheme);
         this.showNotification(`Switched to ${newTheme} mode`, 'info');
+    }
+    
+    // ============ i18n (Internationalization) ============
+    initI18n() {
+        // Initialize i18n system
+        if (window.i18n) {
+            window.i18n.init();
+            
+            // Create language selector in header
+            const container = document.getElementById('language-selector-container');
+            if (container) {
+                window.i18n.createLanguageSelector(container);
+            }
+            
+            // Listen for locale change events
+            window.addEventListener('localeChanged', (e) => {
+                const locale = e.detail.locale;
+                console.log(`[App] Language changed to: ${locale}`);
+                
+                // Update dynamic content
+                this.updateDynamicTranslations();
+                
+                // Show notification
+                const localeName = window.i18n.getAvailableLocales()[locale]?.nativeName || locale;
+                this.showNotification(`Language: ${localeName}`, 'info');
+            });
+        } else {
+            console.warn('[App] i18n system not available');
+        }
+    }
+    
+    /**
+     * Update dynamically generated content with translations
+     * This is called when language changes
+     */
+    updateDynamicTranslations() {
+        // Helper function to translate
+        const t = (key, params) => window.i18n ? window.i18n.t(key, params) : key;
+        
+        // Update status text if needed
+        if (this.elements.statusText && !this.serverRunning) {
+            this.elements.statusText.textContent = t('status.disconnected');
+        }
+        
+        // Update nav status text
+        const navStatusText = document.getElementById('nav-status-text');
+        if (navStatusText && !this.serverRunning) {
+            navStatusText.textContent = t('status.offline');
+        }
+        
+        // Update theme label
+        this.updateThemeLabel();
+        
+        // Note: Most content is updated automatically via data-i18n attributes
+        // This function is only for content that's dynamically generated or needs special handling
+    }
+    
+    /**
+     * Update theme toggle button label based on current language
+     */
+    updateThemeLabel() {
+        const label = this.elements.themeToggle?.querySelector('.theme-label');
+        if (label && window.i18n) {
+            const isDark = this.currentTheme === 'dark';
+            label.textContent = window.i18n.t(isDark ? 'theme.dark' : 'theme.light');
+        }
     }
     
     // NOTE: updateBenchmarkServerStatus is injected by GuideLLM module
