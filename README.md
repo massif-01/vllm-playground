@@ -191,7 +191,7 @@ export VLLM_CPU_OMP_THREADS_BIND=auto
 
 ## 📝 License
 
-MIT License - See [LICENSE](LICENSE) file for details.
+Apache 2.0 License - See [LICENSE](LICENSE) file for details.
 
 ## 🤝 Contributing
 
