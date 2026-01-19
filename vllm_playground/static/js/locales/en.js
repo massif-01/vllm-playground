@@ -95,6 +95,12 @@ const en = {
             gpu: '🎮 GPU',
             help: 'CPU mode is recommended for macOS'
         },
+        accelerator: {
+            label: 'Accelerator',
+            nvidia: 'NVIDIA (CUDA)',
+            amd: 'AMD (ROCm)',
+            help: 'Select your GPU accelerator type for container mode'
+        },
         host: {
             label: 'Host'
         },

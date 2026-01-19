@@ -114,6 +114,7 @@ class VLLMWebUI {
             tensorParallel: document.getElementById('tensor-parallel'),
             gpuMemory: document.getElementById('gpu-memory'),
             gpuDevice: document.getElementById('gpu-device'),
+            acceleratorSelect: document.getElementById('accelerator-select'),
 
             // CPU settings
             cpuKvcache: document.getElementById('cpu-kvcache'),
@@ -1350,16 +1351,30 @@ number ::= [0-9]+`
                 console.warn('GPU not auto-detected (detection method: ' + capabilities.detection_method + ')');
                 this.addLog('[SYSTEM] GPU not auto-detected - Manual selection available', 'warning');
             } else {
-                // GPU is available
-                console.log('GPU is available on this system');
-                this.elements.modeHelpText.innerHTML = 'CPU and GPU modes available. GPU recommended for larger models.';
-                this.addLog('[SYSTEM] GPU detected - Both CPU and GPU modes available', 'info');
+                // GPU is available - determine accelerator type
+                const accelerator = capabilities.accelerator || 'nvidia';  // Default to nvidia if not specified
+                const acceleratorName = accelerator === 'amd' ? 'AMD (ROCm)' : 'NVIDIA (CUDA)';
+                
+                console.log(`GPU is available on this system: ${acceleratorName}`);
+                this.elements.modeHelpText.innerHTML = `CPU and GPU modes available. ${acceleratorName} GPU detected.`;
+                this.addLog(`[SYSTEM] ${acceleratorName} GPU detected - Both CPU and GPU modes available`, 'info');
 
-                // Show GPU status display
-                document.getElementById('gpu-status-display').style.display = 'block';
+                // Auto-select the detected accelerator in the dropdown
+                if (this.elements.acceleratorSelect) {
+                    this.elements.acceleratorSelect.value = accelerator;
+                    console.log(`Auto-selected accelerator: ${accelerator}`);
+                }
 
-                // Start GPU status polling
-                this.startGpuStatusPolling();
+                // Show GPU status display (only for NVIDIA currently, AMD uses different monitoring)
+                if (accelerator === 'nvidia') {
+                    document.getElementById('gpu-status-display').style.display = 'block';
+                    // Start GPU status polling
+                    this.startGpuStatusPolling();
+                } else {
+                    // AMD GPU detected - status polling not yet supported
+                    document.getElementById('gpu-status-display').style.display = 'none';
+                    this.addLog('[SYSTEM] AMD GPU status monitoring not yet supported', 'info');
+                }
             }
         } catch (error) {
             console.error('Failed to check feature availability:', error);
@@ -1551,6 +1566,11 @@ number ::= [0-9]+`
             this.elements.cpuSettings.style.display = 'block';
             this.elements.gpuSettings.style.display = 'none';
 
+            // Hide accelerator dropdown in CPU mode
+            if (this.elements.acceleratorSelect) {
+                this.elements.acceleratorSelect.style.display = 'none';
+            }
+
             // Set dtype to bfloat16 for CPU
             this.elements.dtype.value = 'bfloat16';
         } else {
@@ -1562,6 +1582,11 @@ number ::= [0-9]+`
             // Show GPU settings, hide CPU settings
             this.elements.cpuSettings.style.display = 'none';
             this.elements.gpuSettings.style.display = 'block';
+
+            // Show accelerator dropdown in GPU mode
+            if (this.elements.acceleratorSelect) {
+                this.elements.acceleratorSelect.style.display = 'inline-block';
+            }
 
             // Set dtype to auto for GPU
             this.elements.dtype.value = 'auto';
@@ -1992,6 +2017,8 @@ number ::= [0-9]+`
             config.tensor_parallel_size = parseInt(this.elements.tensorParallel.value);
             config.gpu_memory_utilization = parseFloat(this.elements.gpuMemory.value) / 100;
             config.load_format = "auto";
+            // GPU accelerator type (nvidia/amd) for container mode
+            config.accelerator = this.elements.acceleratorSelect.value;
             // GPU device selection
             const gpuDevice = this.elements.gpuDevice.value.trim();
             if (gpuDevice) {
@@ -2093,7 +2120,7 @@ number ::= [0-9]+`
         }
 
         this.addLog(`Run Mode: ${config.run_mode === 'subprocess' ? 'Subprocess (Direct)' : 'Container (Isolated)'}`, 'info');
-        this.addLog(`Compute Mode: ${config.use_cpu ? 'CPU' : 'GPU'}`, 'info');
+        this.addLog(`Compute Mode: ${config.use_cpu ? 'CPU' : `GPU (${config.accelerator?.toUpperCase() || 'NVIDIA'})`}`, 'info');
 
         try {
             const response = await fetch('/api/start', {

@@ -99,6 +99,12 @@ const zhCN = {
             gpu: '🎮 GPU',
             help: 'macOS 推荐使用 CPU 模式'
         },
+        accelerator: {
+            label: '加速器',
+            nvidia: 'NVIDIA (CUDA)',
+            amd: 'AMD (ROCm)',
+            help: '选择容器模式的 GPU 加速器类型'
+        },
         host: {
             label: '主机'
         },

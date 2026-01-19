@@ -237,6 +237,11 @@
                                         <input type="radio" name="compute-mode" id="mode-gpu" value="gpu">
                                         <span data-i18n="serverConfig.computeMode.gpu">🎮 GPU</span>
                                     </label>
+                                    <!-- Accelerator Selection (inline with GPU toggle) -->
+                                    <select id="accelerator-select" class="form-control accelerator-inline" style="display: none;">
+                                        <option value="nvidia" data-i18n="serverConfig.accelerator.nvidia">NVIDIA (CUDA)</option>
+                                        <option value="amd" data-i18n="serverConfig.accelerator.amd">AMD (ROCm)</option>
+                                    </select>
                                 </div>
                                 <small class="form-help" id="mode-help-text" data-i18n="serverConfig.computeMode.help">CPU mode is recommended for macOS</small>
                             </div>

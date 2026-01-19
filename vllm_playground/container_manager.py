@@ -45,9 +45,11 @@ class VLLMContainerManager:
     
     CONTAINER_NAME = "vllm-service"
     
-    # Default images for different platforms (must use fully-qualified names for Podman)
-    # Override with VLLM_CONTAINER_IMAGE environment variable
-    DEFAULT_IMAGE_GPU = "docker.io/vllm/vllm-openai:v0.11.0"  # Official vLLM GPU image (linux/amd64)
+    # Default images for different platforms and accelerators (must use fully-qualified names for Podman)
+    # GPU images by accelerator type
+    DEFAULT_IMAGE_GPU_NVIDIA = "docker.io/vllm/vllm-openai:v0.11.0"  # Official vLLM CUDA image (linux/amd64)
+    DEFAULT_IMAGE_GPU_AMD = "docker.io/rocm/vllm:latest"  # Official vLLM ROCm image from AMD
+    # CPU images by platform
     DEFAULT_IMAGE_CPU_MACOS = "quay.io/rh_ee_micyang/vllm-mac:v0.11.0"  # CPU image for macOS (linux/arm64)
     DEFAULT_IMAGE_CPU_X86 = "quay.io/rh_ee_micyang/vllm-cpu:v0.11.0"  # CPU image for x86_64 Linux
     
@@ -84,28 +86,25 @@ class VLLMContainerManager:
         if self.use_sudo:
             logger.info("Container manager initialized with sudo enabled")
     
-    def get_default_image(self, use_cpu: bool = False) -> str:
+    def get_default_image(self, use_cpu: bool = False, accelerator: str = "nvidia") -> str:
         """
-        Get the appropriate container image based on environment, platform, and CPU/GPU mode.
+        Get the appropriate container image based on platform, CPU/GPU mode, and accelerator type.
         
-        Priority:
-        1. VLLM_CONTAINER_IMAGE environment variable (if set)
-        2. CPU image based on platform if use_cpu=True:
+        Image selection:
+        1. CPU mode: Select based on platform
            - macOS (ARM64): quay.io/rh_ee_micyang/vllm-mac:v0.11.0
            - Linux x86_64: quay.io/rh_ee_micyang/vllm-cpu:v0.11.0
-        3. GPU image (default): docker.io/vllm/vllm-openai:v0.11.0
+        2. GPU mode: Select based on accelerator type
+           - nvidia: docker.io/vllm/vllm-openai:v0.11.0 (Official CUDA image)
+           - amd: docker.io/rocm/vllm:latest (Official ROCm image)
         
         Args:
             use_cpu: Whether CPU mode is enabled
+            accelerator: GPU accelerator type ("nvidia" or "amd"), only used when use_cpu=False
             
         Returns:
             Container image name
         """
-        # Check for environment override first
-        env_image = os.environ.get("VLLM_CONTAINER_IMAGE")
-        if env_image:
-            return env_image
-        
         # Return appropriate default based on mode and platform
         if use_cpu:
             # Detect platform for CPU image selection
@@ -121,7 +120,14 @@ class VLLMContainerManager:
                 logger.info(f"Detected platform: {system}/{machine} - using x86_64 CPU image")
                 return self.DEFAULT_IMAGE_CPU_X86
         
-        return self.DEFAULT_IMAGE_GPU
+        # GPU mode - select based on accelerator
+        if accelerator == "amd":
+            logger.info("Using AMD ROCm GPU image")
+            return self.DEFAULT_IMAGE_GPU_AMD
+        else:
+            # Default to NVIDIA
+            logger.info("Using NVIDIA CUDA GPU image")
+            return self.DEFAULT_IMAGE_GPU_NVIDIA
         
     def _should_use_sudo(self) -> bool:
         """
@@ -529,12 +535,13 @@ class VLLMContainerManager:
             Dictionary with container info (id, name, status, ready, etc.)
         """
         use_cpu = vllm_config.get('use_cpu', False)
-        mode_name = "CPU" if use_cpu else "GPU"
+        accelerator = vllm_config.get('accelerator', 'nvidia')
+        mode_name = "CPU" if use_cpu else f"GPU ({accelerator.upper()})"
         logger.info(f"Starting vLLM in {mode_name} mode")
         
         if image is None:
-            # Auto-select appropriate image based on CPU/GPU mode
-            image = self.get_default_image(use_cpu=use_cpu)
+            # Auto-select appropriate image based on CPU/GPU mode and accelerator
+            image = self.get_default_image(use_cpu=use_cpu, accelerator=accelerator)
             logger.info(f"Using container image: {image}")
         
         try:
@@ -627,20 +634,33 @@ class VLLMContainerManager:
             
             # Add GPU passthrough if not in CPU mode
             use_cpu = vllm_config.get('use_cpu', False)
+            accelerator = vllm_config.get('accelerator', 'nvidia')
             if not use_cpu:
-                # For NVIDIA GPU support with Podman/Docker
-                # Try CDI (Container Device Interface) first, then fall back to legacy
-                if self.runtime == "docker":
-                    # Docker uses --gpus flag
-                    podman_cmd.extend(["--gpus", "all"])
-                else:
-                    # Podman uses --device with CDI
-                    # Also add security options needed for GPU access
+                if accelerator == "amd":
+                    # AMD ROCm GPU support
+                    # Based on official vLLM docs: https://docs.vllm.ai/en/latest/getting_started/quickstart/#amd-rocm
                     podman_cmd.extend([
-                        "--device", "nvidia.com/gpu=all",
-                        "--security-opt=label=disable",
+                        "--network=host",
+                        "--group-add=video",
+                        "--cap-add=SYS_PTRACE",
+                        "--security-opt", "seccomp=unconfined",
+                        "--device", "/dev/kfd",
+                        "--device", "/dev/dri",
                     ])
-                logger.info("GPU passthrough enabled for container")
+                    logger.info("AMD ROCm GPU passthrough enabled for container")
+                else:
+                    # NVIDIA CUDA GPU support (default)
+                    if self.runtime == "docker":
+                        # Docker uses --gpus flag
+                        podman_cmd.extend(["--gpus", "all"])
+                    else:
+                        # Podman uses --device with CDI
+                        # Also add security options needed for GPU access
+                        podman_cmd.extend([
+                            "--device", "nvidia.com/gpu=all",
+                            "--security-opt=label=disable",
+                        ])
+                    logger.info("NVIDIA CUDA GPU passthrough enabled for container")
             
             # Add environment variables
             podman_cmd.extend(config['environment'])
