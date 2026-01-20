@@ -49,6 +49,7 @@ class VLLMContainerManager:
     # GPU images by accelerator type
     DEFAULT_IMAGE_GPU_NVIDIA = "docker.io/vllm/vllm-openai:v0.11.0"  # Official vLLM CUDA image (linux/amd64)
     DEFAULT_IMAGE_GPU_AMD = "docker.io/rocm/vllm:latest"  # Official vLLM ROCm image from AMD
+    DEFAULT_IMAGE_GPU_TPU = "docker.io/vllm/vllm-tpu:latest"  # Official vLLM TPU image for Google Cloud TPU
     # CPU images by platform
     DEFAULT_IMAGE_CPU_MACOS = "quay.io/rh_ee_micyang/vllm-mac:v0.11.0"  # CPU image for macOS (linux/arm64)
     DEFAULT_IMAGE_CPU_X86 = "quay.io/rh_ee_micyang/vllm-cpu:v0.11.0"  # CPU image for x86_64 Linux
@@ -97,10 +98,11 @@ class VLLMContainerManager:
         2. GPU mode: Select based on accelerator type
            - nvidia: docker.io/vllm/vllm-openai:v0.11.0 (Official CUDA image)
            - amd: docker.io/rocm/vllm:latest (Official ROCm image)
+           - tpu: docker.io/vllm/vllm-tpu:latest (Official TPU image for Google Cloud)
         
         Args:
             use_cpu: Whether CPU mode is enabled
-            accelerator: GPU accelerator type ("nvidia" or "amd"), only used when use_cpu=False
+            accelerator: GPU accelerator type ("nvidia", "amd", or "tpu"), only used when use_cpu=False
             
         Returns:
             Container image name
@@ -124,6 +126,9 @@ class VLLMContainerManager:
         if accelerator == "amd":
             logger.info("Using AMD ROCm GPU image")
             return self.DEFAULT_IMAGE_GPU_AMD
+        elif accelerator == "tpu":
+            logger.info("Using Google Cloud TPU image")
+            return self.DEFAULT_IMAGE_GPU_TPU
         else:
             # Default to NVIDIA
             logger.info("Using NVIDIA CUDA GPU image")
@@ -648,6 +653,16 @@ class VLLMContainerManager:
                         "--device", "/dev/dri",
                     ])
                     logger.info("AMD ROCm GPU passthrough enabled for container")
+                elif accelerator == "tpu":
+                    # Google Cloud TPU support
+                    # Based on official vLLM docs: https://docs.vllm.ai/en/stable/getting_started/installation/google_tpu.html
+                    # TPU requires privileged mode for full device access
+                    podman_cmd.extend([
+                        "--privileged",
+                        "--network=host",
+                        "--shm-size", "16G",
+                    ])
+                    logger.info("Google Cloud TPU passthrough enabled for container (privileged mode)")
                 else:
                     # NVIDIA CUDA GPU support (default)
                     if self.runtime == "docker":

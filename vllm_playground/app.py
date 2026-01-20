@@ -115,8 +115,8 @@ class VLLMConfig(BaseModel):
     # GPU device selection for subprocess mode (e.g., "0", "1", "0,1" for multi-GPU)
     gpu_device: Optional[str] = None
     # GPU accelerator type for container mode - determines which image and device flags to use
-    # Options: nvidia (CUDA), amd (ROCm)
-    accelerator: Literal["nvidia", "amd"] = "nvidia"
+    # Options: nvidia (CUDA), amd (ROCm), tpu (Google Cloud TPU)
+    accelerator: Literal["nvidia", "amd", "tpu"] = "nvidia"
     # Tool calling support - enables function calling with compatible models
     # Requires vLLM server to be started with --enable-auto-tool-choice and --tool-call-parser
     enable_tool_calling: bool = False  # Disabled by default (can cause issues with some models)
@@ -1193,6 +1193,15 @@ async def get_hardware_capabilities():
                         accelerator = "amd"
                         logger.info(f"AMD GPU detected via Kubernetes API: {node.metadata.name} has {amd_capacity} GPUs")
                         break
+                    
+                    # Check for Google Cloud TPUs
+                    tpu_capacity = node.status.capacity.get('google.com/tpu', '0')
+                    if tpu_capacity and int(tpu_capacity) > 0:
+                        gpu_available = True
+                        detection_method = "kubernetes"
+                        accelerator = "tpu"
+                        logger.info(f"TPU detected via Kubernetes API: {node.metadata.name} has {tpu_capacity} TPUs")
+                        break
                 
                 # Also check node labels for GPU indicators
                 if node.metadata and node.metadata.labels:
@@ -1214,6 +1223,15 @@ async def get_hardware_capabilities():
                                 detection_method = "kubernetes"
                                 accelerator = "amd"
                                 logger.info(f"AMD GPU detected via node labels: {node.metadata.name}")
+                                break
+                    if any('tpu' in k.lower() or 'cloud.google.com/gke-tpu' in k for k in labels.keys()):
+                        if node.status and node.status.capacity:
+                            tpu_capacity = node.status.capacity.get('google.com/tpu', '0')
+                            if tpu_capacity and int(tpu_capacity) > 0:
+                                gpu_available = True
+                                detection_method = "kubernetes"
+                                accelerator = "tpu"
+                                logger.info(f"TPU detected via node labels: {node.metadata.name}")
                                 break
             
             if not gpu_available:
@@ -1270,11 +1288,42 @@ async def get_hardware_capabilities():
         except Exception as e:
             logger.warning(f"Error checking GPU via amd-smi: {e}")
     
+    # Fallback: Try tpu-info for Google Cloud TPUs (local/container environments)
+    if not gpu_available and not os.getenv('KUBERNETES_NAMESPACE'):
+        try:
+            result = subprocess.run(
+                ['tpu-info'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            # tpu-info returns 0 and shows TPU info if TPUs are present
+            if result.returncode == 0 and ('TPU' in result.stdout or 'chip' in result.stdout.lower()):
+                gpu_available = True
+                detection_method = "tpu-info"
+                accelerator = "tpu"
+                logger.info(f"TPU detected via tpu-info")
+        except FileNotFoundError:
+            # Fallback: Check for /dev/accel* devices (TPU device nodes)
+            import glob
+            accel_devices = glob.glob('/dev/accel*')
+            if accel_devices:
+                gpu_available = True
+                detection_method = "dev-accel"
+                accelerator = "tpu"
+                logger.info(f"TPU detected via /dev/accel* devices: {accel_devices}")
+            else:
+                logger.debug("tpu-info not found and no /dev/accel* devices - no TPU detected")
+        except subprocess.TimeoutExpired:
+            logger.warning("tpu-info timeout")
+        except Exception as e:
+            logger.warning(f"Error checking TPU via tpu-info: {e}")
+    
     logger.info(f"Final GPU availability: {gpu_available} (method: {detection_method}, accelerator: {accelerator})")
     return {
         "gpu_available": gpu_available,
         "detection_method": detection_method,
-        "accelerator": accelerator  # "nvidia", "amd", or None
+        "accelerator": accelerator  # "nvidia", "amd", "tpu", or None
     }
 
 

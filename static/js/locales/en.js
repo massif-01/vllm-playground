@@ -87,7 +87,8 @@ const en = {
             label: 'Run Mode',
             subprocess: '⚡ Subprocess',
             container: '📦 Container',
-            help: 'Container: Isolated (recommended), Subprocess: Direct (requires vLLM installed)'
+            help: 'Container: Isolated (recommended), Subprocess: Direct (requires vLLM installed)',
+            subprocessTip: '💡 Tip: Use subprocess mode for additional accelerators (Huawei Ascend, Intel Gaudi, AWS Neuron) with vLLM + hardware plugin installed on the host.'
         },
         computeMode: {
             label: 'Compute Mode',
@@ -99,6 +100,7 @@ const en = {
             label: 'Accelerator',
             nvidia: 'NVIDIA (CUDA)',
             amd: 'AMD (ROCm)',
+            tpu: 'Google TPU',
             help: 'Select your GPU accelerator type for container mode'
         },
         host: {
