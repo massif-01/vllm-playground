@@ -4596,6 +4596,12 @@ async def websocket_terminal(websocket: WebSocket):
     env = os.environ.copy()
     env.update(config_response["env"])
     
+    # Set terminal environment variables for proper TUI rendering
+    env["TERM"] = "xterm-256color"
+    env["COLORTERM"] = "truecolor"
+    env["FORCE_COLOR"] = "1"
+    env["NO_COLOR"] = ""  # Ensure color is not disabled
+    
     # Verify vLLM server is actually responding before starting Claude Code
     vllm_url = config_response["env"]["ANTHROPIC_BASE_URL"]
     try:
@@ -4727,10 +4733,12 @@ async def websocket_terminal(websocket: WebSocket):
                         break
                     # Write input to PTY (encode to bytes if needed)
                     data = message.get("data", "")
+                    logger.debug(f"PTY input: {repr(data)}")
                     if isinstance(data, str):
                         data = data.encode('utf-8')
                     try:
                         proc.write(data)
+                        logger.debug(f"PTY write successful: {len(data)} bytes")
                     except OSError as e:
                         if e.errno == 5:  # Input/output error - process died
                             await websocket.send_json({
@@ -4745,6 +4753,7 @@ async def websocket_terminal(websocket: WebSocket):
                     if proc.isalive():
                         rows = message.get("rows", 24)
                         cols = message.get("cols", 80)
+                        logger.info(f"Resizing PTY to {rows}x{cols}")
                         proc.setwinsize(rows, cols)
                 
                 elif message.get("type") == "ping":
