@@ -358,6 +358,22 @@ const ClaudeCodeMethods = {
             this.claudeTerminal.writeln('');
             // Focus terminal to enable keyboard input
             this.claudeTerminal.focus();
+            
+            // Fit terminal and send current dimensions to PTY
+            // This ensures the PTY knows the correct terminal size
+            setTimeout(() => {
+                this.fitClaudeTerminal();
+                // Send resize after fit to sync PTY dimensions
+                if (this.claudeTerminal && this.claudeWebSocket.readyState === WebSocket.OPEN) {
+                    const dims = { cols: this.claudeTerminal.cols, rows: this.claudeTerminal.rows };
+                    console.log('Sending terminal dimensions:', dims);
+                    this.claudeWebSocket.send(JSON.stringify({
+                        type: 'resize',
+                        cols: dims.cols,
+                        rows: dims.rows
+                    }));
+                }
+            }, 100);
         };
         
         this.claudeWebSocket.onmessage = (event) => {
@@ -381,6 +397,17 @@ const ClaudeCodeMethods = {
                         this.claudeTerminal.writeln('');
                         // Update connection info
                         this.updateClaudeConnectionInfo(message);
+                        // Re-fit and send dimensions now that Claude Code has started
+                        setTimeout(() => {
+                            this.fitClaudeTerminal();
+                            if (this.claudeWebSocket && this.claudeWebSocket.readyState === WebSocket.OPEN) {
+                                this.claudeWebSocket.send(JSON.stringify({
+                                    type: 'resize',
+                                    cols: this.claudeTerminal.cols,
+                                    rows: this.claudeTerminal.rows
+                                }));
+                            }
+                        }, 50);
                         break;
                     
                     case 'error':

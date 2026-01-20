@@ -265,7 +265,7 @@
 /* Terminal Container */
 .claude-terminal {
     flex: 1;
-    min-height: 400px;
+    min-height: 500px;
     background: #1a1a2e;
     border: 1px solid var(--border-color);
     border-radius: 0 0 8px 8px;
@@ -275,6 +275,7 @@
 /* xterm.js overrides for dark theme */
 .claude-terminal .xterm {
     padding: 12px;
+    height: 100%;
 }
 
 .claude-terminal .xterm-viewport {
@@ -283,6 +284,7 @@
 
 .claude-terminal .xterm-screen {
     background: #1a1a2e;
+    height: 100%;
 }
 
 /* Help Text */
