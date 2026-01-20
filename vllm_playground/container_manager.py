@@ -643,10 +643,12 @@ class VLLMContainerManager:
             if not use_cpu:
                 if accelerator == "amd":
                     # AMD ROCm GPU support
-                    # Based on official vLLM docs: https://docs.vllm.ai/en/latest/getting_started/quickstart/#amd-rocm
+                    # Based on official ROCm docs: https://rocm.docs.amd.com/en/latest/how-to/rocm-for-ai/inference/benchmark-docker/vllm.html
                     podman_cmd.extend([
                         "--network=host",
                         "--group-add=video",
+                        "--ipc=host",
+                        "--shm-size", "16G",
                         "--cap-add=SYS_PTRACE",
                         "--security-opt", "seccomp=unconfined",
                         "--device", "/dev/kfd",
@@ -690,9 +692,12 @@ class VLLMContainerManager:
             podman_cmd.append(image)
             
             # Add vLLM command-line arguments
-            # Both official vllm-openai image and our custom images now support CLI args
-            # (Custom images use entrypoint.sh that passes through all arguments)
+            # NVIDIA vllm-openai image has entrypoint, but AMD/TPU images need explicit command
             if config.get('vllm_args'):
+                # AMD ROCm and TPU images don't have automatic entrypoint - need to call vllm serve
+                if accelerator in ("amd", "tpu"):
+                    podman_cmd.extend(["vllm", "serve"])
+                    logger.info(f"Using 'vllm serve' command for {accelerator.upper()} container")
                 podman_cmd.extend(config['vllm_args'])
                 logger.info(f"vLLM arguments: {' '.join(config['vllm_args'])}")
             
